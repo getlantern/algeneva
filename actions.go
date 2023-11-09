@@ -1,53 +1,89 @@
-package geneva
+package algeneva
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strconv"
 	"strings"
 )
 
 // Action is an interface that all actions must implement.
 type Action interface {
-	// String returns a string representation of the action.
+	// String returns a string representation of the action in Geneva syntax as follows:
+	//		<action>{<arg1>:<arg2>:...:<argn>}(<leftAction>,<rightAction>)
+	//
+	// The argument list maybe omitted if the action does not require any arguments. The left and right actions
+	// are present only if there is another action in the action tree. If another action is present, it must be
+	// formatted as (<leftAction>,<rightAction>), regardless of whether the left or right action is nil. In
+	// which case, the action is formatted as (<leftAction>,) or (,<rightAction>).
 	String() string
 	// Apply applies the action to the field and returns the result of the action.
 	Apply(field Field) []Field
 }
 
-func NewAction(action string, next Action) (Action, error) {
+// NewAction parses an action string in Geneva syntax and returns a ChangecaseAction, InsertAction, ReplaceAction,
+// or DuplicateAction as an Action with the subsequent left and right action branches configured. If left or right
+// is nil, the corresponding action is automatically set to TerminateAction. For ChangecaseAction, InsertAction,
+// and ReplaceAction, left is configured as the next action. NewAction returns an error if action is not a valid
+// action or is formatted incorrectly.
+func NewAction(action string, left, right Action) (Action, error) {
 	br := strings.Index(action, "{")
 	var args []string
 	if br != -1 {
-		args = strings.Split(action[br:], ":")
+		if action[len(action)-1] != '}' {
+			return nil, errors.New("closing brace must end action string if args are given")
+		}
+
+		args = strings.Split(action[br+1:len(action)-1], ":")
 		action = action[:br]
+	}
+
+	// only duplicate action supports a right branch action so return an error if the action is not duplicate and
+	// the right action is not nil.
+	if action != "duplicate" && right != nil {
+		return nil, fmt.Errorf("%s action does not support a right branch action", action)
 	}
 
 	switch action {
 	case "changecase":
 		if len(args) != 1 {
-			return nil, fmt.Errorf("changecase requires 1 argument")
+			return nil, errors.New("changecase requires 1 argument")
 		}
 
-		return NewChangecaseAction(args[0], next)
+		return NewChangecaseAction(args[0], left)
 	case "insert":
 		if len(args) != 4 {
-			return nil, fmt.Errorf("insert requires 4 arguments")
+			return nil, errors.New("insert requires 4 arguments")
 		}
 
-		n, _ := strconv.Atoi(args[3])
-		return NewInsertAction(args[0], args[1], args[2], n, next)
+		n, err := strconv.Atoi(args[3])
+		if err != nil {
+			return nil, fmt.Errorf("insert number of copies (%q) must be an int", args[3])
+		}
+
+		return NewInsertAction(args[0], args[1], args[2], n, left)
 	case "replace":
 		if len(args) != 3 {
-			return nil, fmt.Errorf("insert requires 3 arguments")
+			return nil, errors.New("replace requires 3 arguments")
 		}
 
-		n, _ := strconv.Atoi(args[2])
-		return NewReplaceAction(args[0], args[1], n, next)
+		n, err := strconv.Atoi(args[2])
+		if err != nil {
+			return nil, fmt.Errorf("replace number of copies (%q) must be an int", args[2])
+		}
+
+		return NewReplaceAction(args[0], args[1], n, left)
 	case "duplicate":
-		return NewDuplicateAction(next, nil), nil
+		// duplicate action does not support arguments so return an error if the argument list is not empty
+		if len(args) != 0 {
+			return nil, errors.New("duplicate does not support arguments")
+		}
+
+		return NewDuplicateAction(left, right), nil
 	default:
-		return nil, fmt.Errorf("invalid action: %s", action)
+		return nil, fmt.Errorf("unknown action: %s", action)
 	}
 }
 
@@ -72,8 +108,8 @@ type ChangecaseAction struct {
 	Next Action
 }
 
-// NewChangecaseAction returns a new ChangecaseAction with case c and next action n.
-// If c is not "upper" or "lower", NewChangecaseAction returns an error.
+// NewChangecaseAction returns a new ChangecaseAction with case c and next action n. If next is nil, it is
+// automatically set to TerminateAction. If c is not "upper" or "lower", NewChangecaseAction returns an error.
 func NewChangecaseAction(c string, next Action) (*ChangecaseAction, error) {
 	if c != "upper" && c != "lower" {
 		return nil, fmt.Errorf("invalid case: %s", c)
@@ -107,7 +143,7 @@ func (a *ChangecaseAction) Apply(field Field) []Field {
 
 // InsertAction inserts Value at Location in the Component of the field Num times.
 type InsertAction struct {
-	// Value is the value to insert into the field.
+	// Value is the value to insert into the field. It is URL encoded with space encoded as %20 instead of "+".
 	Value string
 	value string
 	// Location can be one of the following:
@@ -127,9 +163,9 @@ type InsertAction struct {
 	Next Action
 }
 
-// NewInsertAction returns a new InsertAction with value v, location l, component c, number of
-// copies of the value n, and next action. NewInsertAction returns an error if c is not "name" or "value"
-// or if l is not "start", "end", "mid", or "random". If n is <= 0, n is set to 1.
+// NewInsertAction returns a new InsertAction with value v, location l, component c, number of copies of the value n,
+// and next action. If next is nil, it is automatically set to TerminateAction. NewInsertAction returns an error if c
+// is not "name" or "value" or if l is not "start", "end", "mid", or "random". If n is <= 0, n is set to 1.
 func NewInsertAction(v, l, c string, n int, next Action) (*InsertAction, error) {
 	if l != "start" && l != "end" && l != "mid" && l != "random" {
 		return nil, fmt.Errorf("invalid location: %s", l)
@@ -143,7 +179,13 @@ func NewInsertAction(v, l, c string, n int, next Action) (*InsertAction, error) 
 		n = 1
 	}
 
-	nv := strings.Repeat(v, n)
+	// geneva uses URL encoding for the value but with %20 as space instead of +, so we need to unescape it
+	nv, err := url.PathUnescape(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid value: %s, %w", v, err)
+	}
+
+	nv = strings.Repeat(nv, n)
 	return &InsertAction{
 		Value:     v,
 		value:     nv,
@@ -190,7 +232,7 @@ func (i *InsertAction) insert(str string) string {
 
 // ReplaceAction replaces the field with Value in the Component of the field with Num copies of Value.
 type ReplaceAction struct {
-	// Value is the value to replace the field with.
+	// Value is the value to replace the field with. It is URL encoded with space encoded as %20 instead of "+".
 	// Delete can be simulated by setting Value to an empty string.
 	Value string
 	value string
@@ -205,8 +247,9 @@ type ReplaceAction struct {
 	Next Action
 }
 
-// NewReplaceAction returns a new ReplaceAction with value v, component c, number of copies of the value n,
-// and next action. NewReplaceAction returns an error if c is not "name" or "value".
+// NewReplaceAction returns a new ReplaceAction with value v, component c, number of copies of the value n, and next
+// action. If next is nil, it is automatically set to TerminateAction. NewReplaceAction returns an error if c is not
+// "name" or "value".
 func NewReplaceAction(v, c string, n int, next Action) (*ReplaceAction, error) {
 	if c != "name" && c != "value" {
 		return nil, fmt.Errorf("invalid component: %s", c)
@@ -216,7 +259,13 @@ func NewReplaceAction(v, c string, n int, next Action) (*ReplaceAction, error) {
 		n = 1
 	}
 
-	nv := strings.Repeat(v, n)
+	// geneva uses URL encoding for the value but with %20 as space instead of +, so we need to unescape it
+	nv, err := url.PathUnescape(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid value: %s, %w", v, err)
+	}
+
+	nv = strings.Repeat(nv, n)
 	return &ReplaceAction{
 		Value:     v,
 		value:     nv,
@@ -254,13 +303,14 @@ func modifyFieldComponent(field Field, component string, fn func(string) string)
 // DuplicateAction duplicates the field and applies LeftAction to the original field and
 // RightAction to the duplicate. The result of LeftAction and RightAction are concatenated and returned.
 type DuplicateAction struct {
-	// LeftAction is applied to the original field. If LeftAction is nil, the original field is unmodified.
+	// LeftAction is applied to the original field.
 	LeftAction Action
-	// RightAction is applied to the duplicate field. If RightAction is nil, the duplicate field is unmodified.
+	// RightAction is applied to the duplicate field.
 	RightAction Action
 }
 
 // NewDuplicateAction returns a new DuplicateAction with left action l and right action r.
+// If l or r is nil, NewDuplicateAction automatically sets the action to TerminateAction.
 func NewDuplicateAction(l, r Action) *DuplicateAction {
 	return &DuplicateAction{
 		LeftAction:  terminateIfNil(l),
@@ -270,7 +320,7 @@ func NewDuplicateAction(l, r Action) *DuplicateAction {
 
 // String returns a string representation of the duplicate action.
 func (a *DuplicateAction) String() string {
-	return fmt.Sprintf("duplicate(%s, %s)", a.LeftAction, a.RightAction)
+	return fmt.Sprintf("duplicate(%s, %s)", a.LeftAction.String(), a.RightAction.String())
 }
 
 // Apply duplicates the field and applies LeftAction to the original field and RightAction to the duplicate.

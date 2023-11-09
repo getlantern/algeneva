@@ -1,4 +1,4 @@
-package geneva
+package algeneva
 
 import (
 	"testing"
@@ -25,10 +25,8 @@ func TestChangeCaseAction_Apply(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &ChangecaseAction{
-				Case: "upper",
-				Next: &TerminateAction{},
-			}
+			a, err := NewChangecaseAction("upper", nil)
+			assert.NoError(t, err)
 
 			got := a.Apply(tt.field)
 			assert.Equal(t, tt.want, got[0])
@@ -69,12 +67,13 @@ func TestInsertAction_Apply(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a, _ := NewInsertAction(tt.conf.Value,
+			a, err := NewInsertAction(tt.conf.Value,
 				tt.conf.Location,
 				tt.conf.Component,
 				tt.conf.Num,
 				nil,
 			)
+			assert.NoError(t, err)
 
 			got := a.Apply(tt.field)
 			assert.Equal(t, tt.want, got[0])
@@ -109,7 +108,9 @@ func TestReplaceAction_Apply(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a, _ := NewReplaceAction(tt.conf.Value, tt.conf.Component, tt.conf.Num, nil)
+			a, err := NewReplaceAction(tt.conf.Value, tt.conf.Component, tt.conf.Num, nil)
+			assert.NoError(t, err)
+
 			got := a.Apply(tt.field)
 			assert.Equal(t, tt.want, got[0])
 		})
