@@ -9,23 +9,23 @@ import (
 var (
 	// ErrInvalidRule is returned when a rule is not a valid rule or is formatted incorrectly.
 	ErrInvalidRule = errors.New("invalid rule")
-	// ErrInvalidRule is returned when a rule is not a valid rule or is formatted incorrectly.
+	// ErrInvalidAction is returned when an action is not a valid action or is formatted incorrectly.
 	ErrInvalidAction = errors.New("invalid action")
 )
 
-// NewStrategy constructs a Strategy from strategy. strategy consists of a series of rules separated by '|'. Each rule
+// newStrategy constructs a Strategy from strategy. strategy consists of a series of rules separated by '|'. Each rule
 // is formatted as '<trigger>-<action>-|', rules must end with '-|'. An error is returned if strategy is not a valid
 // strategy or is formatted incorrectly.
-func NewStrategy(strategy string) (Strategy, error) {
-	var rules []Rule
+func newStrategy(strategystr string) (strategy, error) {
+	var rules []rule
 
 	// Split the string into rules, which are separated by '|', and parse each rule.
-	parts := strings.SplitAfter(strategy, "|")
+	parts := strings.SplitAfter(strategystr, "|")
 	switch {
 	case parts[len(parts)-1] != "":
-		return Strategy{}, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategy)
+		return strategy{}, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategystr)
 	case parts[0] == "":
-		return Strategy{}, errors.New("no rules found")
+		return strategy{}, errors.New("no rules found")
 	default:
 	}
 
@@ -33,140 +33,149 @@ func NewStrategy(strategy string) (Strategy, error) {
 	for _, rule := range parts[:len(parts)-1] {
 		r, err := parseRule(rule)
 		if err != nil {
-			return Strategy{}, err
+			return strategy{}, err
 		}
 
 		rules = append(rules, r)
 	}
 
-	return Strategy{
-		Rules: rules,
+	return strategy{
+		rules: rules,
 	}, nil
 }
 
-// Strategy is a series of Geneva rules to be applied to a request.
-type Strategy struct {
-	Rules []Rule
+// strategy is a series of Geneva rules to be applied to a request.
+type strategy struct {
+	rules []rule
 }
 
-// String returns a string representation of the Strategy.
-func (s *Strategy) String() string {
+// string returns a string representation of the Strategy.
+func (s *strategy) string() string {
 	var rules []string
-	for _, rule := range s.Rules {
-		rules = append(rules, rule.String())
+	for _, r := range s.rules {
+		rules = append(rules, r.string())
 	}
 
 	return strings.Join(rules, "")
 }
 
-// Apply applies the strategy to the request.
-func (s *Strategy) Apply(req *Request) {
+// apply applies the strategy to the request.
+func (s *strategy) apply(req *request) {
 	// iterate over each rule and if the trigger matches, apply the action tree to the target field.
-	for _, rule := range s.Rules {
-		if field, match := rule.Trigger.Match(req); match {
+	for _, r := range s.rules {
+		if fld, match := r.trigger.match(req); match {
+			fmt.Printf("match with field: %+v\n", fld)
 			// apply the action tree to the target field.
 			// since the duplicate action can cause the tree to branch, the modifications are returned as a slice of
 			// Fields which need to be applied to the request.
-			mods := rule.Apply(field)
+			fmt.Printf("applying rule: %s\n", r.string())
+			mods := r.apply(fld)
 			// apply the modifications to the request.
-			applyModifications(req, field, mods)
+			applyModifications(req, fld, mods)
+		} else {
+			fmt.Println("no match")
 		}
 	}
 }
 
-// Rule is a single trigger and action tree to be applied to the target field if the trigger is met.
-type Rule struct {
-	// Trigger is the condition that must be met for the rule to be applied.
-	Trigger Trigger
-	// Tree is the action tree to be applied to the target field if the trigger is met.
-	Tree Action
+// rule is a single trigger and action tree to be applied to the target field if the trigger is met.
+type rule struct {
+	// trigger is the condition that must be met for the rule to be applied.
+	trigger trigger
+	// tree is the action tree to be applied to the target field if the trigger is met.
+	tree action
 }
 
-// String returns a string representation of the Rule.
-func (r *Rule) String() string {
-	return fmt.Sprintf("%s-%s-|", r.Trigger.String(), r.Tree.String())
+// string returns a string representation of the Rule.
+func (r *rule) string() string {
+	return fmt.Sprintf("%s-%s-|", r.trigger.string(), r.tree.string())
 }
 
-// Apply applies the Tree to the field.
-func (r *Rule) Apply(field Field) []Field {
-	return r.Tree.Apply(field)
+// apply applies the Tree to the field.
+func (r *rule) apply(f field) []field {
+	return r.tree.apply(f)
 }
 
-// Trigger is a condition that must be met for the rule to be applied.
-type Trigger struct {
-	// Proto is the protocol of the request.
-	Proto string
-	// TargetField is the field to apply actions.
-	TargetField string
-	// MatchStr is the value Field needs to be to match. If MatchStr is '*', then the trigger will always match.
-	MatchStr string
+// trigger is a condition that must be met for the rule to be applied.
+type trigger struct {
+	// proto is the protocol of the request.
+	proto string
+	// targetField is the field to apply actions.
+	targetField string
+	// matchStr is the value Field needs to be to match. If matchStr is '*', then the trigger will always match.
+	matchStr string
 }
 
-// String returns a string representation of the Trigger.
-func (t *Trigger) String() string {
-	return fmt.Sprintf("[%s:%s:%s]", strings.ToUpper(t.Proto), t.TargetField, t.MatchStr)
+// string returns a string representation of the Trigger.
+func (t *trigger) string() string {
+	return fmt.Sprintf("[%s:%s:%s]", strings.ToUpper(t.proto), t.targetField, t.matchStr)
 }
 
-// Match returns whether the value of TargetField of req matches MatchStr. If true, the target field is returned
+// match returns whether the value of TargetField of req matches MatchStr. If true, the target field is returned
 // as a Field.
 // Since DNS and DNSQR are not supported yet, Proto is ignored, except if it is empty, in which case it will fail.
-func (t *Trigger) Match(req *Request) (Field, bool) {
-	if t.Proto == "" {
-		return Field{}, false
+func (t *trigger) match(req *request) (field, bool) {
+	fmt.Println("checking trigger")
+	if t.proto == "" {
+		return field{}, false
 	}
 
-	field := Field{}
-	switch t.TargetField {
+	fld := field{}
+	switch t.targetField {
 	case "method":
-		field.Value = req.method
+		fld.value = req.method
 	case "path":
-		field.Value = req.path
+		fld.value = req.path
 	case "version":
-		field.Value = req.version
+		fld.value = req.version
 	default:
+		fmt.Printf("target: %s\n", t.targetField)
+		fmt.Printf("headers: %q\n", req.headers)
 		// the target field is a header. find it and parse it into a Field.
-		header := req.getHeader(t.TargetField)
+		header := req.getHeader(t.targetField)
 		if header == "" {
-			return Field{}, false
+			fmt.Println("header not found")
+			return field{}, false
 		}
 
 		parts := strings.Split(header, ":")
-		field = Field{
-			Name:     parts[0],
-			Value:    parts[1],
-			IsHeader: true,
+		fld = field{
+			name:     parts[0],
+			value:    parts[1],
+			isHeader: true,
 		}
 	}
 
-	return field, matchValue(field.Value, t.MatchStr)
+	return fld, matchValue(fld.value, t.matchStr)
 }
 
 func matchValue(value, matchstr string) bool {
+	fmt.Printf("value: %s, matchstr: %s\n", value, matchstr)
 	return matchstr == "*" || value == matchstr
 }
 
 // parseRule parses a string, rule, and returns a Rule. It returns an error if rule is not a valid rule or is
 // formatted incorrectly.
-func parseRule(r string) (Rule, error) {
+func parseRule(r string) (rule, error) {
 	parts := strings.Split(r, "-")
 
 	if len(parts) != 3 && parts[len(parts)-1] != "|" {
-		return Rule{}, fmt.Errorf("%w: %s, should be formatted as '<trigger>-<actions>-|'", ErrInvalidRule, r)
+		return rule{}, fmt.Errorf("%w: %s, should be formatted as '<trigger>-<actions>-|'", ErrInvalidRule, r)
 	}
 
-	trigger, err := parseTrigger(parts[0])
+	trig, err := parseTrigger(parts[0])
 	if err != nil {
-		return Rule{}, err
+		return rule{}, err
 	}
 
 	tree, err := parseAction(parts[1])
 	if err != nil {
-		return Rule{}, err
+		return rule{}, err
 	}
 
-	return Rule{
-		Trigger: trigger,
-		Tree:    tree,
+	return rule{
+		trigger: trig,
+		tree:    tree,
 	}, nil
 }
 
@@ -174,70 +183,70 @@ func parseRule(r string) (Rule, error) {
 // or is formatted incorrectly. A valid trigger is formatted as '[<proto>:<field>:<matchstr>]', where proto is the
 // protocol, field is the target field to apply actions, and matchstr is the string to match against.
 // Currently only HTTP is supported as a protocol.
-func parseTrigger(trigger string) (Trigger, error) {
-	parts := strings.Split(trigger, ":")
+func parseTrigger(str string) (trigger, error) {
+	parts := strings.Split(str, ":")
 
 	// Check if the trigger is formatted correctly and not empty.
-	if trigger == "" ||
-		trigger[0] != '[' ||
-		trigger[len(trigger)-1] != ']' ||
+	if str == "" ||
+		str[0] != '[' ||
+		str[len(str)-1] != ']' ||
 		len(parts) != 3 {
-		return Trigger{},
-			fmt.Errorf("%w: %s, trigger should be formatted as '[<proto>:<field>:<matchstr>]'", ErrInvalidRule, trigger)
+		return trigger{},
+			fmt.Errorf("%w: %s, trigger should be formatted as '[<proto>:<field>:<matchstr>]'", ErrInvalidRule, str)
 	}
 
 	proto := strings.ToUpper(parts[0][1:])
 	switch proto {
 	case "HTTP":
 	case "DNS", "DNSQR":
-		return Trigger{}, fmt.Errorf("%w: trigger protocols DNS and DNSQR are not supported yet", ErrInvalidRule)
+		return trigger{}, fmt.Errorf("%w: trigger protocols DNS and DNSQR are not supported yet", ErrInvalidRule)
 	default:
-		return Trigger{}, fmt.Errorf("%w: unsupported trigger protocol %q", ErrInvalidRule, proto)
+		return trigger{}, fmt.Errorf("%w: unsupported trigger protocol %q", ErrInvalidRule, proto)
 	}
 
-	field := strings.ToLower(parts[1])
+	fld := strings.ToLower(parts[1])
 	matchstr := strings.ToLower(parts[2][:len(parts[2])-1])
 
-	return Trigger{
-		Proto:       proto,
-		TargetField: field,
-		MatchStr:    matchstr,
+	return trigger{
+		proto:       proto,
+		targetField: fld,
+		matchStr:    matchstr,
 	}, nil
 }
 
 // parseAction parses an action string in Geneva syntax and returns an Action. It returns an error if action is not a valid action or
 // is formatted incorrectly. A valid action is formatted as '<action>[(<left>,<right>)]', where left and right are
 // subsequences of actions. '(<left>,<right>)' is only required if there is a subsequent action.
-func parseAction(action string) (Action, error) {
-	if action == "" {
-		return &TerminateAction{}, nil
+func parseAction(actionstr string) (action, error) {
+	if actionstr == "" {
+		return &terminateAction{}, nil
 	}
 
 	// check is there is a next action by finding the first and last parentheses.
-	fp := strings.Index(action, "(")
-	lp := strings.LastIndex(action, ")")
+	fp := strings.Index(actionstr, "(")
+	lp := strings.LastIndex(actionstr, ")")
 	if lp < fp {
-		return nil, fmt.Errorf("%w: %s, missing matching parentheses", ErrInvalidRule, action)
+		return nil, fmt.Errorf("%w: %s, missing matching parentheses", ErrInvalidRule, actionstr)
 	}
 
 	// if we didn't find any parentheses, then there is no next action, so just construct the action.
 	if fp == -1 {
-		a, err := NewAction(action, nil, nil)
+		a, err := newAction(actionstr, nil, nil)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s, %s", ErrInvalidAction, action, err)
+			return nil, fmt.Errorf("%w: %s, %s", ErrInvalidAction, actionstr, err)
 		}
 
 		return a, nil
 	}
 
 	// there is a next action, so we need to split what's inside the parentheses into the left and right actions.
-	l, r, err := splitLeftRight(action[fp : lp+1])
+	l, r, err := splitLeftRight(actionstr[fp : lp+1])
 	if err != nil {
 		return nil, err
 	}
 
 	// parse the left and right actions.
-	var left, right, a Action
+	var left, right, a action
 	if left, err = parseAction(l); err != nil {
 		return nil, err
 	}
@@ -247,8 +256,8 @@ func parseAction(action string) (Action, error) {
 	}
 
 	// construct the action
-	if a, err = NewAction(action[:fp], left, right); err != nil {
-		return nil, fmt.Errorf("%w: %s, %s", ErrInvalidAction, action, err)
+	if a, err = newAction(actionstr[:fp], left, right); err != nil {
+		return nil, fmt.Errorf("%w: %s, %s", ErrInvalidAction, actionstr, err)
 	}
 
 	return a, nil
@@ -256,12 +265,12 @@ func parseAction(action string) (Action, error) {
 
 // splitLeftRight splits action into the left and right subactions. action is the next action in the action tree, and
 // is formatted as '([<leftaction>],[<rightaction>])' where leftaction and rightaction can be subsequences of actions.
-func splitLeftRight(action string) (string, string, error) {
+func splitLeftRight(actionstr string) (string, string, error) {
 	// since the comma must be present, there is at least one for each '('. so we just need to count the ',' and '('
 	// as we iterate over the string until the counts are equal. everything before the ',' must be the left action,
 	// and everything after must be the right action.
 	var np, nc int
-	for i, c := range action {
+	for i, c := range actionstr {
 		switch c {
 		case '(':
 			np++
@@ -270,33 +279,35 @@ func splitLeftRight(action string) (string, string, error) {
 		}
 
 		if np == nc {
-			return action[1:i], action[i+1 : len(action)-1], nil
+			return actionstr[1:i], actionstr[i+1 : len(actionstr)-1], nil
 		}
 	}
 
 	// if we exit the loop, then the action is not formatted correctly.
-	return "", "", fmt.Errorf("%w: invalid format for left and right actions from %s", ErrInvalidRule, action)
+	return "", "", fmt.Errorf("%w: invalid format for left and right actions from %s", ErrInvalidRule, actionstr)
 }
 
 // applyModifications applies the modifications, mods, to the field in the request. field is the original unmodified
 // field.
-func applyModifications(req *Request, field Field, mods []Field) {
+func applyModifications(req *request, fld field, mods []field) {
+	fmt.Printf("applying %d modifications to %+v\n", len(mods), fld)
 	// iterate over mods and construct the new value.
 	var newValue string
-	if field.IsHeader {
+	if fld.isHeader {
 		var vals []string
 		for _, mod := range mods {
-			vals = append(vals, mod.Name+":"+mod.Value)
+			vals = append(vals, mod.name+":"+mod.value)
 		}
 
 		newValue = strings.Join(vals, "\r\n")
 	} else {
 		for _, mod := range mods {
-			newValue += mod.Value
+			newValue += mod.value
 		}
 	}
 
-	switch field.Name {
+	fmt.Printf("new value: %q\n", newValue)
+	switch fld.name {
 	case "method":
 		req.method = newValue
 	case "path":
@@ -304,7 +315,8 @@ func applyModifications(req *Request, field Field, mods []Field) {
 	case "version":
 		req.version = newValue
 	default:
-		h := field.Name + ":" + field.Value
+		h := fld.name + ":" + fld.value
+		fmt.Printf("replacing %q with %q\n", h, newValue)
 		req.headers = strings.Replace(req.headers, h, newValue, 1)
 	}
 }

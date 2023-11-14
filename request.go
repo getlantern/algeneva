@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// Request is an extremely simple HTTP Request parser. It only parses the method, path, and version from the start
+// request is an extremely simple HTTP request parser. It only parses the method, path, and version from the start
 // line, and separates the headers and body. It does not parse the headers or body.
-type Request struct {
+type request struct {
 	method  string
 	path    string
 	version string
@@ -17,7 +17,7 @@ type Request struct {
 }
 
 // newRequest parses a byte slice, req, into a request. It returns an error if req is not a valid HTTP request.
-func NewRequest(req []byte) (*Request, error) {
+func newRequest(req []byte) (*request, error) {
 	// Find the index of the end of the headers.
 	idx := bytes.Index(req, []byte("\r\n\r\n"))
 	if idx == -1 {
@@ -32,7 +32,7 @@ func NewRequest(req []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %s", req)
 	}
 
-	return &Request{
+	return &request{
 		method:  mpv[0],
 		path:    mpv[1],
 		version: mpv[2],
@@ -42,7 +42,7 @@ func NewRequest(req []byte) (*Request, error) {
 }
 
 // bytes merges the head and body of the request back into a []byte and returns it.
-func (r *Request) Bytes() []byte {
+func (r *request) bytes() []byte {
 	head := fmt.Sprintf("%s %s %s\r\n%s\r\n\r\n", r.method, r.path, r.version, r.headers)
 
 	size := len(head) + len(r.body)
@@ -54,7 +54,7 @@ func (r *Request) Bytes() []byte {
 	return buf
 }
 
-func (r *Request) getHeader(name string) string {
+func (r *request) getHeader(name string) string {
 	// TODO: this could be more efficient
 	headers := strings.ToLower(r.headers)
 	idx := strings.Index(headers, name+":")

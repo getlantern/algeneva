@@ -1,258 +1,273 @@
 package algeneva
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewStrategy(t *testing.T) {
-	type args struct {
+	tests := []struct {
+		name     string
 		strategy string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Strategy
-		wantErr bool
+		want     strategy
+		wantErr  bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:     "valid strategy",
+			strategy: "[http:path:*]-changecase{upper}-|",
+			want: strategy{
+				rules: []rule{
+					{
+						trigger: trigger{proto: "HTTP", targetField: "path", matchStr: "*"},
+						tree:    testChangecaseAction(),
+					},
+				},
+			},
+			wantErr: false,
+		}, {
+			name:     "invalid format",
+			strategy: "[http:path:*]-changecase{upper}",
+			want:     strategy{},
+			wantErr:  true,
+		}, {
+			name:     "no rules",
+			strategy: "",
+			want:     strategy{},
+			wantErr:  true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewStrategy(tt.args.strategy)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewStrategy() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewStrategy() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestStrategy_Apply(t *testing.T) {
-	type fields struct {
-		Rules []Rule
-	}
-	type args struct {
-		req *Request
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &Strategy{
-				Rules: tt.fields.Rules,
-			}
-			s.Apply(tt.args.req)
-		})
-	}
-}
-
-func TestTrigger_Match(t *testing.T) {
-	type fields struct {
-		Proto       string
-		TargetField string
-		MatchStr    string
-	}
-	type args struct {
-		req *Request
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   Field
-		want1  bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tr := &Trigger{
-				Proto:       tt.fields.Proto,
-				TargetField: tt.fields.TargetField,
-				MatchStr:    tt.fields.MatchStr,
-			}
-			got, got1 := tr.Match(tt.args.req)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Trigger.Match() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("Trigger.Match() got1 = %v, want %v", got1, tt.want1)
-			}
+			got, err := newStrategy(tt.strategy)
+			testIfErrorOrEqual(t, tt.wantErr, err, tt.want, got)
 		})
 	}
 }
 
 func Test_parseRule(t *testing.T) {
-	type args struct {
-		r string
-	}
 	tests := []struct {
 		name    string
-		args    args
-		want    Rule
+		rule    string
+		want    rule
 		wantErr bool
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseRule(tt.args.r)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseRule() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseRule() = %v, want %v", got, tt.want)
-			}
+			got, err := parseRule(tt.rule)
+			testIfErrorOrEqual(t, tt.wantErr, err, tt.want, got)
 		})
 	}
 }
 
 func Test_parseTrigger(t *testing.T) {
-	type args struct {
-		trigger string
-	}
 	tests := []struct {
 		name    string
-		args    args
-		want    Trigger
+		trigger string
+		want    trigger
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:    "valid trigger",
+			trigger: "[http:path:*]",
+			want: trigger{
+				proto:       "HTTP",
+				targetField: "path",
+				matchStr:    "*",
+			},
+			wantErr: false,
+		}, {
+			name:    "error: invalid format",
+			trigger: "[http:path:*",
+			want:    trigger{},
+			wantErr: true,
+		}, {
+			name:    "error: invalid format, missing argument",
+			trigger: "[http:*]",
+			want:    trigger{},
+			wantErr: true,
+		}, {
+			name:    "error: unsupported proto",
+			trigger: "[icmp:path:*]",
+			want:    trigger{},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTrigger(tt.args.trigger)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseTrigger() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseTrigger() = %v, want %v", got, tt.want)
-			}
+			got, err := parseTrigger(tt.trigger)
+			testIfErrorOrEqual(t, tt.wantErr, err, tt.want, got)
 		})
 	}
 }
 
 func Test_parseAction(t *testing.T) {
-	type args struct {
-		action string
-	}
 	tests := []struct {
 		name    string
-		args    args
-		want    Action
+		action  string
+		want    action
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:    "terminateIfEmpty",
+			action:  "",
+			want:    action(&terminateAction{}),
+			wantErr: false,
+		}, {
+			name:    "no subsequent actions",
+			action:  "changecase{upper}",
+			want:    testChangecaseAction(),
+			wantErr: false,
+		}, {
+			name:   "subsequent actions",
+			action: "duplicate(changecase{upper},changecase{lower})",
+			want: action(
+				&duplicateAction{
+					leftAction:  testChangecaseAction(),
+					rightAction: testChangecaseAction(),
+				},
+			),
+			wantErr: false,
+		}, {
+			name:    "error: invalid format missing closing paren",
+			action:  "changecase{upper}(,",
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseAction(tt.args.action)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseAction() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseAction() = %v, want %v", got, tt.want)
-			}
+			got, err := parseAction(tt.action)
+			testIfErrorOrEqual(t, tt.wantErr, err, tt.want, got)
 		})
 	}
 }
 
 func Test_splitLeftRight(t *testing.T) {
-	type args struct {
-		action string
-	}
 	tests := []struct {
-		name    string
-		args    args
-		want    string
-		want1   string
-		wantErr bool
+		name      string
+		action    string
+		wantLeft  string
+		wantRight string
+		wantErr   bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:      "no right",
+			action:    "(left,)",
+			wantLeft:  "left",
+			wantRight: "",
+			wantErr:   false,
+		}, {
+			name:      "no left",
+			action:    "(,right)",
+			wantLeft:  "",
+			wantRight: "right",
+			wantErr:   false,
+		}, {
+			name:      "nested actions",
+			action:    "(left(subleft0,subleft1(subsubleft0,)),right(subright0,subright1))",
+			wantLeft:  "left(subleft0,subleft1(subsubleft0,))",
+			wantRight: "right(subright0,subright1)",
+			wantErr:   false,
+		}, {
+			name:      "error: invalid format",
+			action:    "(left)",
+			wantLeft:  "",
+			wantRight: "",
+			wantErr:   true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1, err := splitLeftRight(tt.args.action)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("splitLeftRight() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("splitLeftRight() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("splitLeftRight() got1 = %v, want %v", got1, tt.want1)
+			gotLeft, gotRight, err := splitLeftRight(tt.action)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				if assert.NoError(t, err) {
+					assert.Equal(t, tt.wantLeft, gotLeft)
+					assert.Equal(t, tt.wantRight, gotRight)
+				}
 			}
 		})
 	}
 }
 
 func Test_applyModifications(t *testing.T) {
-	testReq := "GET /route HTTP/1.1\r\nHost: localhost\r\n\r\nsome data"
-
 	tests := []struct {
 		name  string
-		field Field
-		mods  []Field
+		field field
+		mods  []field
 		want  string
 	}{
 		{
 			name: "modify method",
-			field: Field{
-				Name:     "method",
-				Value:    "GET",
-				IsHeader: false,
+			field: field{
+				name:     "method",
+				value:    "GET",
+				isHeader: false,
 			},
-			mods: []Field{
+			mods: []field{
 				{
-					Name:     "method",
-					Value:    "GET--",
-					IsHeader: false,
+					name:     "method",
+					value:    "GET--",
+					isHeader: false,
 				},
 			},
 			want: "GET-- /route HTTP/1.1\r\nHost: localhost\r\n\r\nsome data",
 		},
 		{
 			name: "modify header",
-			field: Field{
-				Name:     "Host",
-				Value:    " localhost",
-				IsHeader: true,
+			field: field{
+				name:     "Host",
+				value:    " localhost",
+				isHeader: true,
 			},
-			mods: []Field{
+			mods: []field{
 				{
-					Name:     "aaaaa",
-					Value:    " localhost",
-					IsHeader: true,
+					name:     "aaaaa",
+					value:    " localhost",
+					isHeader: true,
 				},
 				{
-					Name:     "Host",
-					Value:    " localhost",
-					IsHeader: true,
+					name:     "Host",
+					value:    " localhost",
+					isHeader: true,
 				},
 			},
 			want: "GET /route HTTP/1.1\r\naaaaa: localhost\r\nHost: localhost\r\n\r\nsome data",
 		},
 	}
 	for _, tt := range tests {
-		req, _ := NewRequest([]byte(testReq))
+		req := testReq()
 		t.Run(tt.name, func(t *testing.T) {
-			applyModifications(req, tt.field, tt.mods)
-			assert.Equal(t, tt.want, string(req.Bytes()))
+			applyModifications(&req, tt.field, tt.mods)
+			assert.Equal(t, tt.want, string(req.bytes()))
 		})
+	}
+}
+
+func testReq() request {
+	return request{
+		method:  "GET",
+		path:    "/route",
+		version: "HTTP/1.1",
+		headers: "Host: localhost",
+		body:    []byte("some data"),
+	}
+}
+
+func testChangecaseAction() action {
+	return action(&changecaseAction{Case: "upper", next: action(&terminateAction{})})
+}
+
+func testIfErrorOrEqual(t *testing.T, wantErr bool, err error, want interface{}, got interface{}) {
+	if wantErr {
+		assert.Error(t, err)
+	} else {
+		if assert.NoError(t, err) {
+			assert.Equal(t, want, got)
+		}
 	}
 }
