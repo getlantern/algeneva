@@ -55,11 +55,9 @@ func (r *request) bytes() []byte {
 }
 
 func (r *request) getHeader(name string) string {
-	// TODO: this could be more efficient
 	headers := strings.ToLower(r.headers)
 	idx := strings.Index(headers, name+":")
 	if idx == -1 {
-		fmt.Printf("header %s not found\n", name)
 		return ""
 	}
 

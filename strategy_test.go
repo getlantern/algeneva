@@ -122,7 +122,7 @@ func Test_parseAction(t *testing.T) {
 			wantErr: false,
 		}, {
 			name:   "subsequent actions",
-			action: "duplicate(changecase{upper},changecase{lower})",
+			action: "duplicate(changecase{upper},changecase{upper})",
 			want: action(
 				&duplicateAction{
 					leftAction:  testChangecaseAction(),

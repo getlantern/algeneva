@@ -64,16 +64,12 @@ func (s *strategy) apply(req *request) {
 	// iterate over each rule and if the trigger matches, apply the action tree to the target field.
 	for _, r := range s.rules {
 		if fld, match := r.trigger.match(req); match {
-			fmt.Printf("match with field: %+v\n", fld)
 			// apply the action tree to the target field.
 			// since the duplicate action can cause the tree to branch, the modifications are returned as a slice of
 			// Fields which need to be applied to the request.
-			fmt.Printf("applying rule: %s\n", r.string())
 			mods := r.apply(fld)
 			// apply the modifications to the request.
 			applyModifications(req, fld, mods)
-		} else {
-			fmt.Println("no match")
 		}
 	}
 }
@@ -115,7 +111,6 @@ func (t *trigger) string() string {
 // as a Field.
 // Since DNS and DNSQR are not supported yet, Proto is ignored, except if it is empty, in which case it will fail.
 func (t *trigger) match(req *request) (field, bool) {
-	fmt.Println("checking trigger")
 	if t.proto == "" {
 		return field{}, false
 	}
@@ -129,12 +124,9 @@ func (t *trigger) match(req *request) (field, bool) {
 	case "version":
 		fld.value = req.version
 	default:
-		fmt.Printf("target: %s\n", t.targetField)
-		fmt.Printf("headers: %q\n", req.headers)
 		// the target field is a header. find it and parse it into a Field.
 		header := req.getHeader(t.targetField)
 		if header == "" {
-			fmt.Println("header not found")
 			return field{}, false
 		}
 
@@ -150,7 +142,6 @@ func (t *trigger) match(req *request) (field, bool) {
 }
 
 func matchValue(value, matchstr string) bool {
-	fmt.Printf("value: %s, matchstr: %s\n", value, matchstr)
 	return matchstr == "*" || value == matchstr
 }
 
@@ -290,7 +281,6 @@ func splitLeftRight(actionstr string) (string, string, error) {
 // applyModifications applies the modifications, mods, to the field in the request. field is the original unmodified
 // field.
 func applyModifications(req *request, fld field, mods []field) {
-	fmt.Printf("applying %d modifications to %+v\n", len(mods), fld)
 	// iterate over mods and construct the new value.
 	var newValue string
 	if fld.isHeader {
@@ -306,7 +296,6 @@ func applyModifications(req *request, fld field, mods []field) {
 		}
 	}
 
-	fmt.Printf("new value: %q\n", newValue)
 	switch fld.name {
 	case "method":
 		req.method = newValue
@@ -316,7 +305,6 @@ func applyModifications(req *request, fld field, mods []field) {
 		req.version = newValue
 	default:
 		h := fld.name + ":" + fld.value
-		fmt.Printf("replacing %q with %q\n", h, newValue)
 		req.headers = strings.Replace(req.headers, h, newValue, 1)
 	}
 }
