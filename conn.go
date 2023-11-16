@@ -20,27 +20,12 @@ func (c *conn) Write(p []byte) (n int, err error) {
 	}
 
 	c.strategies[0].apply(req)
-	req.body = encrypt(req.body)
-
 	return c.Conn.Write(req.bytes())
 }
 
 // Read reads data from the connection and decrypts it. It returns the number of bytes read and any error encountered.
 func (c *conn) Read(p []byte) (n int, err error) {
-	buf := make([]byte, len(p))
-	n, err = c.Conn.Read(buf)
-	if err != nil {
-		return 0, err
-	}
-
-	req, err := newRequest(buf[:n])
-	if err != nil {
-		return 0, err
-	}
-
-	req.body = decrypt(req.body)
-	copy(p, req.bytes())
-	return n, nil
+	return c.Conn.Read(p)
 }
 
 func (c *conn) Close() error {
