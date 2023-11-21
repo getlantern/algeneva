@@ -22,12 +22,3 @@ func (c *conn) Write(p []byte) (n int, err error) {
 	c.strategies[0].apply(req)
 	return c.Conn.Write(req.bytes())
 }
-
-// Read reads data from the connection and returns the number of bytes read and any error.
-func (c *conn) Read(p []byte) (n int, err error) {
-	return c.Conn.Read(p)
-}
-
-func (c *conn) Close() error {
-	return c.Conn.Close()
-}
