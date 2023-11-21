@@ -17,7 +17,10 @@ func Test_conn_Write(t *testing.T) {
 	strat, err := newStrategy(strategystr)
 	assert.NoError(t, err)
 
-	c := &conn{newTestConn(len(want)), []strategy{strat}}
+	c := &conn{
+		Conn:       newTestConn(len(want)),
+		strategies: []strategy{strat},
+	}
 
 	n, err := c.Write([]byte(req))
 	assert.NoError(t, err)

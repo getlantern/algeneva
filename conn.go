@@ -11,8 +11,8 @@ type conn struct {
 	strategies []strategy
 }
 
-// Write applies a strategy to p, encrypts the data, and writes it to the connection. It returns the number of bytes
-// written and any error.
+// Write wraps p using conn.wrapper and if the connection is a client then will apply strategies before writing to
+// the connection. It returns the number of bytes written and any error.
 func (c *conn) Write(p []byte) (n int, err error) {
 	req, err := newRequest(p)
 	if err != nil {
@@ -23,7 +23,7 @@ func (c *conn) Write(p []byte) (n int, err error) {
 	return c.Conn.Write(req.bytes())
 }
 
-// Read reads data from the connection and decrypts it. It returns the number of bytes read and any error encountered.
+// Read reads data from the connection and returns the number of bytes read and any error.
 func (c *conn) Read(p []byte) (n int, err error) {
 	return c.Conn.Read(p)
 }

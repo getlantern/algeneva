@@ -115,14 +115,23 @@ func (t *trigger) match(req *request) (field, bool) {
 		return field{}, false
 	}
 
-	fld := field{}
+	var fld field
 	switch t.targetField {
 	case "method":
-		fld.value = req.method
+		fld = field{
+			name:  "method",
+			value: req.method,
+		}
 	case "path":
-		fld.value = req.path
+		fld = field{
+			name:  "path",
+			value: req.path,
+		}
 	case "version":
-		fld.value = req.version
+		fld = field{
+			name:  "version",
+			value: req.version,
+		}
 	default:
 		// the target field is a header. find it and parse it into a Field.
 		header := req.getHeader(t.targetField)
