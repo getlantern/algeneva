@@ -221,7 +221,6 @@ func (a *insertAction) string() string {
 // Component is used to determine which component of the header to apply the action to. apply calls
 // the next action in the action tree.
 func (a *insertAction) apply(fld field) []field {
-	fmt.Println(a)
 	fld = modifyFieldComponent(fld, a.component, a.insert)
 	return a.next.apply(fld)
 }

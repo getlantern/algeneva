@@ -7,23 +7,18 @@ import (
 
 // client is a wrapper around net.Dialer that applies geneva strategies when writing to the connection.
 type client struct {
-	strategies []strategy
+	strategy strategy
 }
 
 // NewClient will parse the list of strategies and return a new client. An error is returned if any of the strategies
 // are invalid.
-func NewClient(strategies []string) (*client, error) {
-	ss := make([]strategy, 0, len(strategies))
-	for _, s := range strategies {
-		strat, err := newStrategy(s)
-		if err != nil {
-			return nil, err
-		}
-
-		ss = append(ss, strat)
+func NewClient(strategy string) (*client, error) {
+	strat, err := newStrategy(strategy)
+	if err != nil {
+		return nil, err
 	}
 
-	return &client{strategies: ss}, nil
+	return &client{strategy: strat}, nil
 }
 
 // Dial connects to the address on the named network and returns a conn that wraps a net.Conn.
@@ -51,5 +46,5 @@ func (c *client) DialContext(ctx context.Context, network, address string) (net.
 		return nil, err
 	}
 
-	return &conn{Conn: cc, strategies: c.strategies}, nil
+	return &Conn{conn: cc, strategy: c.strategy}, nil
 }
