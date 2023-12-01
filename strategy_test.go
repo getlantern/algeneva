@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewStrategy(t *testing.T) {
@@ -185,10 +186,9 @@ func Test_splitLeftRight(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
-				if assert.NoError(t, err) {
-					assert.Equal(t, tt.wantLeft, gotLeft)
-					assert.Equal(t, tt.wantRight, gotRight)
-				}
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantLeft, gotLeft)
+				assert.Equal(t, tt.wantRight, gotRight)
 			}
 		})
 	}
@@ -266,8 +266,7 @@ func testIfErrorOrEqual(t *testing.T, wantErr bool, err error, want interface{},
 	if wantErr {
 		assert.Error(t, err)
 	} else {
-		if assert.NoError(t, err) {
-			assert.Equal(t, want, got)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	}
 }

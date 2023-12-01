@@ -58,8 +58,8 @@ func newAction(actionstr string, left, right action) (action, error) {
 	case "insert":
 		n := 1
 		switch len(args) {
-		// default to 1 copy if no number of copies is given
 		case 3:
+			// default to 1 copy if no number of copies is given
 		case 4:
 			// if a number of copies is given, parse it and return an error if it is not an int
 			if args[3] != "" {
@@ -69,15 +69,15 @@ func newAction(actionstr string, left, right action) (action, error) {
 				}
 			}
 		default:
-			return nil, errors.New("insert requires 4 arguments")
+			return nil, errors.New("insert requires 3 or 4 arguments. 'num' is optional and defaults to 1")
 		}
 
 		return newInsertAction(args[0], args[1], args[2], n, left)
 	case "replace":
 		n := 1
 		switch len(args) {
-		// default to 1 copy if no number of copies is given
 		case 2:
+			// default to 1 copy if no number of copies is given
 		case 3:
 			// if a number of copies is given, parse it and return an error if it is not an int
 			if args[2] != "" {
@@ -87,7 +87,7 @@ func newAction(actionstr string, left, right action) (action, error) {
 				}
 			}
 		default:
-			return nil, errors.New("replace requires 3 arguments")
+			return nil, errors.New("replace requires 2 or 3 arguments. 'num' is optional and defaults to 1")
 		}
 
 		return newReplaceAction(args[0], args[1], n, left)

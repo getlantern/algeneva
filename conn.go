@@ -1,86 +1,92 @@
 package algeneva
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"net"
-	"time"
+	"net/textproto"
+	"strconv"
+	"strings"
 )
 
-// Conn is a wrapper around a net.Conn that applies strategies to http requests sent from a client.
-type Conn struct {
-	conn     net.Conn
+// conn implements the net.Conn interface and is a wrapper around a net.Conn that applies strategies to http requests
+// sent from a client.
+type conn struct {
+	net.Conn
+	// strategy is the strategy to apply to requests sent on the connection.
 	strategy strategy
+	// buf is a buffer used to store the request until the headers have been parsed.
+	buf bytes.Buffer
+	// remaining is the number of bytes of the request to be read and sent after finding the end of the headers and
+	// applying the strategy (e.i. the body, or what remains of it after sending the buffer).
+	remaining uint64
+	// readHeaders is a boolean indicating if the headers have been read yet.
+	readHeaders bool
 }
 
-// Write wraps p using conn.wrapper and if the connection is a client then will apply strategies before writing to
-// the connection. It returns the number of bytes written and any error.
-func (c *Conn) Write(p []byte) (n int, err error) {
-	req, err := newRequest(p)
-	if err != nil {
-		return 0, err
+// Write applies the configured strategy to the request and writes it to the underlying connection.
+//
+// If the start line and headers have not been read yet, Write will buffer the request until they have. Only after
+// they have been read so the strategy can be applied will anything actually be written to the underlying connection.
+func (c *conn) Write(p []byte) (n int, err error) {
+	defer func() {
+		// reset the connection state if we encountered an error or if we sent the whole request.
+		if err != nil || (c.remaining == 0 && c.readHeaders) {
+			c.reset()
+		}
+	}()
+
+	// since we can't apply the strategy until we've read all the headers, we need to buffer the
+	// request until we have.
+	if !c.readHeaders {
+		c.buf.Write(p)
+		idx := bytes.Index(c.buf.Bytes(), []byte("\r\n\r\n"))
+		if idx == -1 {
+			return len(p), nil
+		}
+
+		// now that we have the headers, we can parse the start line and headers.
+		req, err := newRequest(c.buf.Bytes())
+		if err != nil {
+			return 0, err
+		}
+
+		// get the content-length header so we know how many bytes of the request are left to read.
+		clh := req.getHeader("content-length")
+		cls := strings.Split(clh, ":")
+		if len(cls) != 2 {
+			return 0, errors.New("missing content-length header")
+		}
+
+		c.remaining, err = strconv.ParseUint(textproto.TrimString(cls[1]), 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid content-length header: %w", err)
+		}
+
+		c.readHeaders = true
+
+		// apply the strategy to the request and write it to the underlying connection.
+		c.strategy.apply(req)
+		if _, err = c.Conn.Write(req.bytes()); err != nil {
+			return 0, err
+		}
+
+		// subtract the length of req.body in case some the request body was included in p.
+		c.remaining -= uint64(len(req.body))
+		return len(p), nil
 	}
 
-	c.strategy.apply(req)
-	return c.conn.Write(req.bytes())
+	// if we've already read the headers, we can just write p to the underlying connection.
+	n, err = c.Conn.Write(p)
+	c.remaining -= uint64(n)
+
+	return n, err
 }
 
-// Read reads data from the connection and returns the number of bytes read and any error.
-func (c *Conn) Read(p []byte) (n int, err error) {
-	return c.conn.Read(p)
-}
-
-// Close closes the connection.
-// Any blocked Read or Write operations will be unblocked and return errors.
-func (conn *Conn) Close() error {
-	return conn.conn.Close()
-}
-
-// LocalAddr returns the local network address, if known.
-func (conn *Conn) LocalAddr() net.Addr {
-	return conn.conn.LocalAddr()
-}
-
-// RemoteAddr returns the remote network address, if known.
-func (conn *Conn) RemoteAddr() net.Addr {
-	return conn.conn.RemoteAddr()
-}
-
-// SetDeadline sets the read and write deadlines associated
-// with the connection. It is equivalent to calling both
-// SetReadDeadline and SetWriteDeadline.
-//
-// A deadline is an absolute time after which I/O operations
-// fail instead of blocking. The deadline applies to all future
-// and pending I/O, not just the immediately following call to
-// Read or Write. After a deadline has been exceeded, the
-// connection can be refreshed by setting a deadline in the future.
-//
-// If the deadline is exceeded a call to Read or Write or to other
-// I/O methods will return an error that wraps os.ErrDeadlineExceeded.
-// This can be tested using errors.Is(err, os.ErrDeadlineExceeded).
-// The error's Timeout method will return true, but note that there
-// are other possible errors for which the Timeout method will
-// return true even if the deadline has not been exceeded.
-//
-// An idle timeout can be implemented by repeatedly extending
-// the deadline after successful Read or Write calls.
-//
-// A zero value for t means I/O operations will not time out.
-func (conn *Conn) SetDeadline(t time.Time) error {
-	return conn.conn.SetDeadline(t)
-}
-
-// SetReadDeadline sets the deadline for future Read calls
-// and any currently-blocked Read call.
-// A zero value for t means Read will not time out.
-func (conn *Conn) SetReadDeadline(t time.Time) error {
-	return conn.conn.SetReadDeadline(t)
-}
-
-// SetWriteDeadline sets the deadline for future Write calls
-// and any currently-blocked Write call.
-// Even if write times out, it may return n > 0, indicating that
-// some of the data was successfully written.
-// A zero value for t means Write will not time out.
-func (conn *Conn) SetWriteDeadline(t time.Time) error {
-	return conn.conn.SetWriteDeadline(t)
+// reset resets the connection state.
+func (c *conn) reset() {
+	c.buf.Reset()
+	c.remaining = 0
+	c.readHeaders = false
 }
