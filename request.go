@@ -32,6 +32,11 @@ func newRequest(req []byte) (*request, error) {
 		return nil, fmt.Errorf("invalid request: %s", req)
 	}
 
+	// only http/1.0 and http/1.1 are supported.
+	if mpv[2] != "HTTP/1.0" && mpv[2] != "HTTP/1.1" {
+		return nil, fmt.Errorf("unsupported HTTP version: %s", mpv[2])
+	}
+
 	return &request{
 		method:  mpv[0],
 		path:    mpv[1],

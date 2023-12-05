@@ -29,7 +29,10 @@ type conn struct {
 //
 // If the start line and headers have not been read yet, Write will buffer the request until they have. Only after
 // they have been read so the strategy can be applied will anything actually be written to the underlying connection.
+// Write does not support chunked transfer encoding or upgrading the connection to a WebSocket.
 func (c *conn) Write(p []byte) (n int, err error) {
+	// TODO: support chunked transfer encoding and upgrading the connection to a WebSocket.
+
 	defer func() {
 		// reset the connection state if we encountered an error or if we sent the whole request.
 		if err != nil || (c.remaining == 0 && c.readHeaders) {
