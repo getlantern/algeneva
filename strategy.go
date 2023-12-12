@@ -13,19 +13,24 @@ var (
 	ErrInvalidAction = errors.New("invalid action")
 )
 
-// newStrategy constructs a Strategy from strategy. strategy consists of a series of rules separated by '|'. Each rule
-// is formatted as '<trigger>-<action>-|', rules must end with '-|'. An error is returned if strategy is not a valid
-// strategy or is formatted incorrectly.
-func newStrategy(strategystr string) (strategy, error) {
+// HTTPStrategy is a series of Geneva rules to be applied to a request.
+type HTTPStrategy struct {
+	rules []rule
+}
+
+// NewHTTPStrategy constructs a HTTP Strategy from strategystr. strategystr consists of a series of rules separated by
+// '|'. Each rule is formatted as '<trigger>-<action>-|', rules must end with '-|'. An error is returned if
+// strategystr is not a valid strategy or is formatted incorrectly.
+func NewHTTPStrategy(strategystr string) (HTTPStrategy, error) {
 	var rules []rule
 
 	// Split the string into rules, which are separated by '|', and parse each rule.
 	parts := strings.SplitAfter(strategystr, "|")
 	switch {
 	case parts[len(parts)-1] != "":
-		return strategy{}, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategystr)
+		return HTTPStrategy{}, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategystr)
 	case parts[0] == "":
-		return strategy{}, errors.New("no rules found")
+		return HTTPStrategy{}, errors.New("no rules found")
 	default:
 	}
 
@@ -33,24 +38,19 @@ func newStrategy(strategystr string) (strategy, error) {
 	for _, rule := range parts[:len(parts)-1] {
 		r, err := parseRule(rule)
 		if err != nil {
-			return strategy{}, err
+			return HTTPStrategy{}, err
 		}
 
 		rules = append(rules, r)
 	}
 
-	return strategy{
+	return HTTPStrategy{
 		rules: rules,
 	}, nil
 }
 
-// strategy is a series of Geneva rules to be applied to a request.
-type strategy struct {
-	rules []rule
-}
-
 // string returns a string representation of the Strategy.
-func (s *strategy) string() string {
+func (s *HTTPStrategy) string() string {
 	var rules []string
 	for _, r := range s.rules {
 		rules = append(rules, r.string())
@@ -59,8 +59,23 @@ func (s *strategy) string() string {
 	return strings.Join(rules, "")
 }
 
+// Apply applies the strategy to the input HTTP request. An error is returned
+// if the input does not represent an HTTP request. The input does not need to
+// include the body, but must include the start-line and all header lines. The
+// body may be included, in which case it will be included in the return value,
+// unmodified.
+func (s *HTTPStrategy) Apply(req []byte) ([]byte, error) {
+	r, err := newRequest(req)
+	if err != nil {
+		return req, err
+	}
+
+	s.apply(r)
+	return r.bytes(), nil
+}
+
 // apply applies the strategy to the request.
-func (s *strategy) apply(req *request) {
+func (s *HTTPStrategy) apply(req *request) {
 	// iterate over each rule and if the trigger matches, apply the action tree to the target field.
 	for _, r := range s.rules {
 		if fld, match := r.trigger.match(req); match {

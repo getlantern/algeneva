@@ -32,7 +32,8 @@ func newRequest(req []byte) (*request, error) {
 		return nil, fmt.Errorf("invalid request: %s", req)
 	}
 
-	// only http/1.0 and http/1.1 are supported.
+	// The scope of application layer Geveva was specifically for HTTP version 1 (HTTP/1.0 and HTTP/1.1), so we only
+	// support HTTP/1.0 and HTTP/1.1. (page 5)
 	if mpv[2] != "HTTP/1.0" && mpv[2] != "HTTP/1.1" {
 		return nil, fmt.Errorf("unsupported HTTP version: %s", mpv[2])
 	}
