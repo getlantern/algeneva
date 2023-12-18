@@ -41,9 +41,11 @@ func newAction(actionstr string, left, right action) (action, error) {
 	}
 
 	// only duplicate action supports a right branch action so return an error if the action is not duplicate and
-	// the right action is not nil.
+	// the right action is not nil or terminate.
 	if actionstr != "duplicate" && right != nil {
-		return nil, fmt.Errorf("%s action does not support a right branch action", actionstr)
+		if _, ok := right.(*terminateAction); !ok {
+			return nil, fmt.Errorf("%s action does not support a right branch action (%s)", actionstr, right.string())
+		}
 	}
 
 	switch actionstr {
@@ -54,24 +56,38 @@ func newAction(actionstr string, left, right action) (action, error) {
 
 		return newChangecaseAction(args[0], left)
 	case "insert":
-		if len(args) != 4 {
-			return nil, errors.New("insert requires 4 arguments")
-		}
-
-		n, err := strconv.Atoi(args[3])
-		if err != nil {
-			return nil, fmt.Errorf("insert number of copies (%q) must be an int", args[3])
+		n := 1
+		switch len(args) {
+		case 3:
+			// default to 1 copy if no number of copies is given
+		case 4:
+			// if a number of copies is given, parse it and return an error if it is not an int
+			if args[3] != "" {
+				var err error
+				if n, err = strconv.Atoi(args[3]); err != nil {
+					return nil, fmt.Errorf("insert number of copies (%q) must be an int", args[3])
+				}
+			}
+		default:
+			return nil, errors.New("insert requires 3 or 4 arguments. 'num' is optional and defaults to 1")
 		}
 
 		return newInsertAction(args[0], args[1], args[2], n, left)
 	case "replace":
-		if len(args) != 3 {
-			return nil, errors.New("replace requires 3 arguments")
-		}
-
-		n, err := strconv.Atoi(args[2])
-		if err != nil {
-			return nil, fmt.Errorf("replace number of copies (%q) must be an int", args[2])
+		n := 1
+		switch len(args) {
+		case 2:
+			// default to 1 copy if no number of copies is given
+		case 3:
+			// if a number of copies is given, parse it and return an error if it is not an int
+			if args[2] != "" {
+				var err error
+				if n, err = strconv.Atoi(args[2]); err != nil {
+					return nil, fmt.Errorf("replace number of copies (%q) must be an int", args[2])
+				}
+			}
+		default:
+			return nil, errors.New("replace requires 2 or 3 arguments. 'num' is optional and defaults to 1")
 		}
 
 		return newReplaceAction(args[0], args[1], n, left)
@@ -149,7 +165,7 @@ type insertAction struct {
 	// location can be one of the following:
 	//   - "start": inserts the value at the start of the field
 	//   - "end": inserts the value at the end of the field
-	//   - "mid": inserts the value at len(field)/2
+	//   - "middle": inserts the value at len(field)/2
 	//   - "random": inserts the value at a random location, 0 < r < len(field), in the field.
 	location string
 	// component only applies if the field is a header, otherwise it is ignored and InsertAction is
@@ -165,9 +181,9 @@ type insertAction struct {
 
 // newInsertAction returns a new InsertAction with value v, location l, component c, number of copies of the value n,
 // and next action. If next is nil, it is automatically set to TerminateAction. newInsertAction returns an error if c
-// is not "name" or "value" or if l is not "start", "end", "mid", or "random". If n is <= 0, n is set to 1.
+// is not "name" or "value" or if l is not "start", "end", "middle", or "random". If n is <= 0, n is set to 1.
 func newInsertAction(v, l, c string, n int, next action) (*insertAction, error) {
-	if l != "start" && l != "end" && l != "mid" && l != "random" {
+	if l != "start" && l != "end" && l != "middle" && l != "random" {
 		return nil, fmt.Errorf("invalid location: %s", l)
 	}
 
@@ -215,7 +231,7 @@ func (i *insertAction) insert(str string) string {
 		return i.value + str
 	case "end":
 		return str + i.value
-	case "mid":
+	case "middle":
 		return str[:len(str)/2] + i.value + str[len(str)/2:]
 	case "random":
 		if len(str) <= 1 {

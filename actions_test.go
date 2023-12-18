@@ -99,7 +99,7 @@ func TestInsertAction_Apply(t *testing.T) {
 	}{
 		{
 			name:  "insert mid",
-			conf:  conf{Value: "[]", Location: "mid", Component: "value", Num: 2},
+			conf:  conf{Value: "[]", Location: "middle", Component: "value", Num: 2},
 			field: field{name: "name", value: "value", isHeader: true},
 			want:  field{name: "name", value: "va[][]lue", isHeader: true},
 		}, {
@@ -117,12 +117,13 @@ func TestInsertAction_Apply(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a, _ := newInsertAction(tt.conf.Value,
+			a, err := newInsertAction(tt.conf.Value,
 				tt.conf.Location,
 				tt.conf.Component,
 				tt.conf.Num,
 				nil,
 			)
+			assert.NoError(t, err)
 
 			got := a.apply(tt.field)
 			assert.Equal(t, tt.want, got[0])
