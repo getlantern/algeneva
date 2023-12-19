@@ -21,16 +21,16 @@ type HTTPStrategy struct {
 // NewHTTPStrategy constructs a HTTP Strategy from strategystr. strategystr consists of a series of rules separated by
 // '|'. Each rule is formatted as '<trigger>-<action>-|', rules must end with '-|'. An error is returned if
 // strategystr is not a valid strategy or is formatted incorrectly.
-func NewHTTPStrategy(strategystr string) (HTTPStrategy, error) {
+func NewHTTPStrategy(strategystr string) (*HTTPStrategy, error) {
 	var rules []rule
 
 	// Split the string into rules, which are separated by '|', and parse each rule.
 	parts := strings.SplitAfter(strategystr, "|")
 	switch {
 	case parts[len(parts)-1] != "":
-		return HTTPStrategy{}, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategystr)
+		return nil, fmt.Errorf("%w: %s, rules must end with '-|'", ErrInvalidRule, strategystr)
 	case parts[0] == "":
-		return HTTPStrategy{}, errors.New("no rules found")
+		return nil, errors.New("no rules found")
 	default:
 	}
 
@@ -38,19 +38,19 @@ func NewHTTPStrategy(strategystr string) (HTTPStrategy, error) {
 	for _, rule := range parts[:len(parts)-1] {
 		r, err := parseRule(rule)
 		if err != nil {
-			return HTTPStrategy{}, err
+			return nil, err
 		}
 
 		rules = append(rules, r)
 	}
 
-	return HTTPStrategy{
+	return &HTTPStrategy{
 		rules: rules,
 	}, nil
 }
 
 // string returns a string representation of the Strategy.
-func (s *HTTPStrategy) string() string {
+func (s *HTTPStrategy) String() string {
 	var rules []string
 	for _, r := range s.rules {
 		rules = append(rules, r.string())

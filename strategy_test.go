@@ -11,13 +11,13 @@ func TestNewStrategy(t *testing.T) {
 	tests := []struct {
 		name     string
 		strategy string
-		want     HTTPStrategy
+		want     *HTTPStrategy
 		wantErr  bool
 	}{
 		{
 			name:     "valid strategy",
 			strategy: "[http:path:*]-changecase{upper}-|",
-			want: HTTPStrategy{
+			want: &HTTPStrategy{
 				rules: []rule{
 					{
 						trigger: trigger{proto: "HTTP", targetField: "path", matchStr: "*"},
@@ -29,12 +29,12 @@ func TestNewStrategy(t *testing.T) {
 		}, {
 			name:     "invalid format",
 			strategy: "[http:path:*]-changecase{upper}",
-			want:     HTTPStrategy{},
+			want:     nil,
 			wantErr:  true,
 		}, {
 			name:     "no rules",
 			strategy: "",
-			want:     HTTPStrategy{},
+			want:     nil,
 			wantErr:  true,
 		},
 	}
