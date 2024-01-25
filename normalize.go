@@ -43,11 +43,11 @@ func NormalizeRequest(req []byte) ([]byte, error) {
 	//
 	// There are three ways to handle an invalid method:
 	//		1. Spell check the method and replace it with the correct one. This only works if valid
-	//			characters were inserted.
+	//		   characters were inserted.
 	//		2. Use a default: if there is a body then use POST, otherwise use GET.
-	// 	3. Return an error. This is not ideal because it will invalidate all Geneva strategies
-	//			that modifies the method, even though these work with others servers (e.g. Apache and
-	//			Nginx).
+	//		3. Return an error. This is not ideal because it will invalidate all Geneva strategies
+	//		   that modifies the method, even though these work with others servers (e.g. Apache and
+	//		   Nginx).
 	//
 	// For now, we will use the second strategy since it is easier to implement.
 	if method == "" {
@@ -105,8 +105,8 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 	// supports it.)
 	// RFC 7230, section 3.1.1.
 	//
-	//		request line = OWS* method OWS* SP OWS* path OWS* SP OWS* version OWS*
-	//					OWS = *( SP / HTAB ) ; Geneva also includes CR
+	//    request line = OWS* method OWS* SP OWS* path OWS* SP OWS* version OWS*
+	//             OWS = *( SP / HTAB ) ; Geneva also includes CR
 	//
 	// We'll also need to clean each component; and since components could be duplicated with
 	// modifications or whitespace inserted in the middle, there could be more than 3 (which we'll
@@ -197,14 +197,14 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 // isValidMethod returns true if method is a valid HTTP method.
 func isValidMethod(method string) bool {
 	// RFC 7231, section 4.1
-	//		method	= "GET"				; section 4.3.1
-	//					| "HEAD"				; section 4.3.2
-	//					| "POST"				; section 4.3.3
-	//					| "PUT"				; section 4.3.4
-	//					| "DELETE"			; section 4.3.5
-	//					| "CONNECT"			; section 4.3.6
-	//					| "OPTIONS"			; section 4.3.7
-	//					| "TRACE"			; section 4.3.8
+	//    method    = "GET"          ; section 4.3.1
+	//              | "HEAD"         ; section 4.3.2
+	//              | "POST"         ; section 4.3.3
+	//              | "PUT"          ; section 4.3.4
+	//              | "DELETE"       ; section 4.3.5
+	//              | "CONNECT"      ; section 4.3.6
+	//              | "OPTIONS"      ; section 4.3.7
+	//              | "TRACE"        ; section 4.3.8
 
 	switch method {
 	case "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE":
@@ -218,10 +218,10 @@ func isValidMethod(method string) bool {
 // authority-form.
 func isValidPath(p []byte) bool {
 	// RFC 7230, section 5.3
-	// 	request-target = origin-form			; Section 5.3.1
-	//							/ absolute-form		; Section 5.3.2
-	//							/ authority-form		; Section 5.3.3
-	//							/ asterisk-form		; Section 5.3.4
+	//    request-target = origin-form        ; Section 5.3.1
+	//                   / absolute-form      ; Section 5.3.2
+	//                   / authority-form     ; Section 5.3.3
+	//                   / asterisk-form      ; Section 5.3.4
 	//
 	// We're not to check for authority-form, as that can get complicated. Maybe in the future we
 	// can add support for it.
@@ -240,18 +240,18 @@ func isValidPath(p []byte) bool {
 // cleanHeader returns h with all invalid characters removed.
 func cleanHeader(h []byte) ([]byte, error) {
 	// RFC 7230, section 3.2
-	//		header-field   = field-name ":" OWS field-value OWS
-	//		field-name     = token
+	//    header-field = field-name ":" OWS field-value OWS
+	//    field-name   = token
 	//
-	//		obs-fold       = CRLF 1*( SP / HTAB )
-	//							; obsolete line folding
+	//    obs-fold     = CRLF 1*( SP / HTAB )
+	//                 ; obsolete line folding
 	//
 	//
-	//		field-value    = *( field-content / obs-fold )
-	//		field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
-	//		field-vchar    = VCHAR / obs-text
+	//    field-value  = *( field-content / obs-fold )
+	//    field-conten = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+	//    field-vchar  = VCHAR / obs-text
 	//
-	//		VCHAR				= %x21-7E ; visible (printing) characters
+	//    VCHAR        = %x21-7E ; visible (printing) characters
 
 	name, value, fnd := bytes.Cut(h, []byte(":"))
 	if !fnd {
@@ -317,20 +317,20 @@ func clean(s []byte, validTokensFn func(b byte) bool) []byte {
 // spec, as it is obsolete.
 var validTokenTable = [127]bool{
 	// RFC 7230, section 3.2
-	//		header-field   = field-name ":" OWS field-value OWS
-	//		field-name     = token
+	//    header-field   = field-name ":" OWS field-value OWS
+	//    field-name     = token
 	//
-	//		obs-fold       = CRLF 1*( SP / HTAB )
-	//							; obsolete line folding
+	//    obs-fold       = CRLF 1*( SP / HTAB )
+	//                   ; obsolete line folding
 	//
-	//	Section 3.2.6
-	//		token          = 1*tchar
+	// Section 3.2.6
+	//    token          = 1*tchar
 	//
-	//		tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
-	//		               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
-	//		               / DIGIT / ALPHA
+	//    tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+	//                   / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+	//                   / DIGIT / ALPHA
 	//
-	//	This lets us efficiently check for valid header characters. Plus, it's easier to read than
+	// This lets us efficiently check for valid header characters. Plus, it's easier to read than
 	// comparing ascii values with <, >, ==.
 
 	'0': true, '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true,
@@ -400,13 +400,13 @@ func isAlpha(b byte) bool {
 // validHeaderValueToken returns true if b is a valid header value token.
 func validHeaderValueToken(b byte) bool {
 	// RFC 7230, section 3.2
-	//		header-field   = field-name ":" OWS field-value OWS
+	//     header-field   = field-name ":" OWS field-value OWS
 	//
-	//		field-value    = *( field-content / obs-fold )
-	//		field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
-	//		field-vchar    = VCHAR / obs-text
+	//     field-value    = *( field-content / obs-fold )
+	//     field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+	//     field-vchar    = VCHAR / obs-text
 	//
-	//		VCHAR				= %x21-7E ; visible (printing) characters
+	//     VCHAR          = %x21-7E ; visible (printing) characters
 
 	return !isCtrl(b) || b == '\t'
 }
@@ -414,13 +414,13 @@ func validHeaderValueToken(b byte) bool {
 // cleanHeaderValue returns s with all invalid header value characters removed.
 func cleanHeaderValue(s []byte) []byte {
 	// RFC 7230, section 3.2
-	//		header-field   = field-name ":" OWS field-value OWS
+	//    header-field   = field-name ":" OWS field-value OWS
 	//
-	//		field-value    = *( field-content / obs-fold )
-	//		field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
-	//		field-vchar    = VCHAR / obs-text
+	//    field-value    = *( field-content / obs-fold )
+	//    field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+	//    field-vchar    = VCHAR / obs-text
 	//
-	//		VCHAR				= %x21-7E ; visible (printing) characters
+	//    VCHAR          = %x21-7E ; visible (printing) characters
 
 	s = bytes.TrimSpace(s)
 	i := 0
