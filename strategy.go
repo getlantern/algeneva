@@ -302,7 +302,7 @@ func splitLeftRight(actionstr string) (string, string, error) {
 	return "", "", fmt.Errorf("%w: invalid format for left and right actions from %s", ErrInvalidRule, actionstr)
 }
 
-// applyModifications applies the modifications, mods, to the field in the request. field is the original unmodified
+// applyModifications applies the modifications, mods, to the field in the request. fld is the original unmodified
 // field.
 func applyModifications(req *request, fld field, mods []field) {
 	// iterate over mods and construct the new value.
