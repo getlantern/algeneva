@@ -102,8 +102,7 @@ func NormalizeRequest(req []byte) ([]byte, error) {
 		}
 
 		// Since there can only be one host header, we need to check if it was already found. We
-		// keep the first one we find and ignore the rest. Maybe we want to keep the last one
-		// instead?
+		// keep the first one we find and ignore the rest.
 		if bytes.HasPrefix(h, []byte("Host:")) {
 			if hostFnd {
 				continue
