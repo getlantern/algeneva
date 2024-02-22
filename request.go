@@ -16,7 +16,7 @@ type request struct {
 	body    []byte
 }
 
-// newRequest parses a byte slice, req, into a request. It returns an error if req is not a valid HTTP request.
+// newRequest parses a byte slice, req, into a request. newRequest returns an error if req is not a valid HTTP request.
 func newRequest(req []byte) (*request, error) {
 	// Find the index of the end of the headers.
 	idx := bytes.Index(req, []byte("\r\n\r\n"))
@@ -60,6 +60,7 @@ func (r *request) bytes() []byte {
 	return buf
 }
 
+// getHeader returns the full header, including the name, if it exists. getHeader is case insensitive.
 func (r *request) getHeader(name string) string {
 	headers := strings.ToLower(r.headers)
 	idx := strings.Index(headers, name+":")
@@ -67,7 +68,7 @@ func (r *request) getHeader(name string) string {
 		return ""
 	}
 
-	nl := strings.Index(r.headers[idx:], "\n")
+	nl := strings.Index(r.headers[idx:], "\r\n")
 	if nl == -1 {
 		nl = len(r.headers[idx:])
 	}
