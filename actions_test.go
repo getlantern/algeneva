@@ -74,8 +74,8 @@ func TestChangeCaseAction_Apply(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &changecaseAction{
-				Case: "upper",
-				next: &terminateAction{},
+				toCase: "upper",
+				next:   &terminateAction{},
 			}
 
 			got := a.apply(tt.field)
@@ -189,8 +189,8 @@ func TestDuplicateAction_Apply(t *testing.T) {
 			actions: actions{
 				nil,
 				&changecaseAction{
-					Case: "upper",
-					next: &terminateAction{},
+					toCase: "upper",
+					next:   &terminateAction{},
 				},
 			},
 			field: field{name: "name", value: "value"},

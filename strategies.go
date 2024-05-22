@@ -2,8 +2,8 @@ package algeneva
 
 // Strategies is a map of geneva strategies keyed to the country they were found to work in.
 //
-// Note: China has two sets of strategies, one for hostname censoring and one for keyword censoring. Hostname censor
-// strategies are at indices 0-29, and keyword censor strategies start at indices 30.
+// Note: China has two sets of strategies, one for hostname censoring and one for keyword censoring.
+// Hostname censor strategies are at indices 0-29, and keyword censor strategies start at indices 30.
 var Strategies = map[string][]string{
 	"China": {
 		// hostname censor strategies //

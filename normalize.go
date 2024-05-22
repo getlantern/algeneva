@@ -29,9 +29,12 @@ import (
 */
 
 // NormalizeRequest normalizes an HTTP request that was modified with Application-Layer Geneva
-// strategies. NormalizeRequest does not reverse Geneva strategies, it only normalizes the request
-// to adhere to the HTTP/1.0 and HTTP/1.1 RFCs. Most strategies will be undone by this, but some
-// cannot, as it would require knowing the original value that was modified. NormalizeRequest
+// strategies.
+//
+// It is not always possible to recover the original request. Some actions may modify the request
+// in a way that it is impossible to know that original value. For example, the path was changed
+// from "/path" to "/new/path" or "/new /\t\r path". In these cases, NormalizeRequest will at least
+// ensure that the request is valid according to the HTTP/1.0 and HTTP/1.1 RFCs. NormalizeRequest
 // does not guarantee that values, such as URI and host, are correct, only that they are valid
 // according to the RFCs.
 //
@@ -244,7 +247,7 @@ func findPath(components [][]byte) (path string) {
 	}
 
 	// We didn't find a valid path so either it was modified or it was invalid to begin with.
-	// Assuming it was modified and since isValidPath reports if it matches the origin, absolutem
+	// Assuming it was modified and since isValidPath reports if it matches the origin, absolute
 	// or asterisk form, we can check if characters were inserted at the beginning and remove them.
 	for _, comp := range cleanedComps {
 		// Check for the first instance of 'http(s)://' or '/' and return the string from that

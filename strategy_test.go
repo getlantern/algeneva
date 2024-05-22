@@ -259,7 +259,7 @@ func testReq() request {
 }
 
 func testChangecaseAction() action {
-	return action(&changecaseAction{Case: "upper", next: action(&terminateAction{})})
+	return action(&changecaseAction{toCase: "upper", next: action(&terminateAction{})})
 }
 
 func testIfErrorOrEqual(t *testing.T, wantErr bool, err error, want interface{}, got interface{}) {
