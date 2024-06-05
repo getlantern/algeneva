@@ -336,7 +336,7 @@ func newDuplicateAction(l, r action) *duplicateAction {
 
 // string returns a string representation of the duplicate action.
 func (a *duplicateAction) string() string {
-	return fmt.Sprintf("duplicate(%s, %s)", a.leftAction.string(), a.rightAction.string())
+	return fmt.Sprintf("duplicate(%s,%s)", a.leftAction.string(), a.rightAction.string())
 }
 
 // apply duplicates the field and applies LeftAction to the original field and RightAction to the duplicate.
