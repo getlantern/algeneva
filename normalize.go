@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/textproto"
 	"strings"
@@ -91,7 +92,7 @@ func NormalizeRequest(req []byte) ([]byte, error) {
 	// Now clean the headers. We're only going to clean the headers, we'll leave validating them to
 	// the caller.
 	var headers [][]byte
-	hostFnd := false
+	var host string
 	for scanner.Scan() {
 		h := scanner.Bytes()
 		h = append([]byte{}, h...) // Make a copy of h so scanner.Scan doesn't overwrite it.
@@ -104,11 +105,11 @@ func NormalizeRequest(req []byte) ([]byte, error) {
 		// Since there can only be one host header, we need to check if it was already found. We
 		// keep the first one we find and ignore the rest.
 		if bytes.HasPrefix(h, []byte("Host:")) {
-			if hostFnd {
+			if host != "" {
 				continue
 			}
 
-			hostFnd = true
+			host = strings.TrimSpace(string(h[5:]))
 		}
 
 		headers = append(headers, h)
@@ -116,6 +117,22 @@ func NormalizeRequest(req []byte) ([]byte, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+
+	// This is copied from readRequest in the stdlib http package. Modified to check if uri starts
+	// with '/' instead of if it doesn't.
+	//
+	// CONNECT requests are used two different ways, and neither uses a full URL:
+	// The standard use is to tunnel HTTPS through an HTTP proxy.
+	// It looks like "CONNECT www.google.com:443 HTTP/1.1", and the parameter is
+	// just the authority section of a URL. This information should go in req.URL.Host.
+	if method == "CONNECT" && strings.HasPrefix(path, "/") {
+		_, _, err = net.SplitHostPort(host)
+		if err != nil {
+			// default to port if not specified
+			host = host + ":80"
+		}
+		path = host
 	}
 
 	// Now we need to rebuild the request. req might not be big enough to hold the new request, so
