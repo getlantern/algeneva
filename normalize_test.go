@@ -146,6 +146,11 @@ func TestNormalizeRequest(t *testing.T) {
 			"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n",
 			false,
 		}, {
+			"correct URI with host for CONNECT",
+			"CONNECT / HTTP/1.1\r\nHost: www.google.com\r\n\r\n",
+			"CONNECT www.google.com:80 HTTP/1.1\r\nHost: www.google.com\r\n\r\n",
+			false,
+		}, {
 			"clean header",
 			"GET / HTTP/1.1\r\nHost: \r example.com\r\n\r\n",
 			"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n",
