@@ -74,8 +74,7 @@ func (w *writer) Write(p []byte) (n int, err error) {
 	}
 	i := bytes.Index(p, []byte("\r\n\r\n"))
 	if i == -1 {
-		w.buf.Write(p)
-		return len(p), nil
+		return w.buf.Write(p)
 	}
 	n, _ = w.buf.Write(p[:i+4])
 	req, err := w.strategy.Apply(w.buf.Bytes())
