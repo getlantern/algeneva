@@ -33,62 +33,16 @@ import (
 
 // WriteRequest writes req to w while applying the strategy.
 func WriteRequest(w io.Writer, req *http.Request, strategy *HTTPStrategy) error {
-	w = newWriter(w, strategy)
-	return req.Write(w)
-}
-
-// writer is an io.Writer wrapper that applies a strategy to the request before writing it to the
-// wrapped writer. writer forces a flush after every write.
-type writer struct {
-	w               *bufio.Writer
-	buf             *bytes.Buffer
-	strategy        *HTTPStrategy
-	appliedStrategy bool
-}
-
-func newWriter(w io.Writer, strategy *HTTPStrategy) *writer {
-	bw, ok := w.(*bufio.Writer)
-	if !ok {
-		bw = bufio.NewWriter(w)
+	buf := new(bytes.Buffer)
+	if err := req.Write(buf); err != nil {
+		return err
 	}
-
-	return &writer{
-		w:        bw,
-		buf:      new(bytes.Buffer),
-		strategy: strategy,
-	}
-}
-
-func (w *writer) Write(p []byte) (n int, err error) {
-	defer func() {
-		if n > 0 {
-			ferr := w.w.Flush()
-			if ferr != nil && err == nil {
-				err = ferr
-			}
-		}
-	}()
-
-	if w.appliedStrategy {
-		return w.w.Write(p)
-	}
-	i := bytes.Index(p, []byte("\r\n\r\n"))
-	if i == -1 {
-		return w.buf.Write(p)
-	}
-	n, _ = w.buf.Write(p[:i+4])
-	req, err := w.strategy.Apply(w.buf.Bytes())
+	newReq, err := strategy.Apply(buf.Bytes())
 	if err != nil {
-		return n, err
+		return err
 	}
-	w.appliedStrategy = true
-
-	_, err = w.w.Write(req)
-	if err != nil {
-		return 0, err
-	}
-	nc, err := w.w.Write(p[i+4:])
-	return n + nc, err
+	_, err = w.Write(newReq)
+	return err
 }
 
 // ReadRequest reads and parses an HTTP request from b while trying to normalize it. ReadRequest
@@ -188,12 +142,10 @@ func ReadRequest(b *bufio.Reader) (*http.Request, error) {
 	return req, nil
 }
 
-func readline(reader io.Reader) ([]byte, error) {
-	bufReader := bufio.NewReader(reader)
+func readline(reader *bufio.Reader) ([]byte, error) {
 	var buffer bytes.Buffer
-
 	for {
-		line, err := bufReader.ReadBytes('\n')
+		line, err := reader.ReadBytes('\n')
 		isEOF := errors.Is(err, io.EOF)
 		if err != nil && !isEOF {
 			return nil, err
