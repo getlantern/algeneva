@@ -60,6 +60,16 @@ func TestReadRequest(t *testing.T) {
 			"GET / HTTP/1.1\r\nHost: example.com\r\nA: b\r\n\r\n",
 			false,
 		}, {
+			"query string preserved",
+			"GET /search?q=x&a=b HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			"GET /search?q=x&a=b HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			false,
+		}, {
+			"header with empty name is dropped",
+			"GET / HTTP/1.1\r\nHost: example.com\r\n////: junk\r\n\r\n",
+			"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			false,
+		}, {
 			"missing header body separator",
 			"GET / HTTP/1.1\r\nHost: example.com",
 			"",
@@ -117,6 +127,10 @@ func TestCleanHeader(t *testing.T) {
 			"clean header",
 			"Host: \r example.com",
 			"Host: example.com",
+		}, {
+			"name cleans to empty is dropped",
+			"////: value",
+			"",
 		},
 	}
 	for _, tt := range tests {
@@ -173,13 +187,28 @@ func TestParseRequestLine(t *testing.T) {
 			testReqLine{"GET", "/", "HTTP/1.1"},
 			false,
 		}, {
-			"invalid method",
+			"method with appended junk recovers prefix",
 			"GETX / HTTP/1.1",
-			testReqLine{"", "/", "HTTP/1.1"},
+			testReqLine{"GET", "/", "HTTP/1.1"},
+			false,
+		}, {
+			"duplicated method concatenated recovers prefix",
+			"CONNECTCONNECT example.com:443 HTTP/1.1",
+			testReqLine{"CONNECT", "/", "HTTP/1.1"},
+			false,
+		}, {
+			"method with long appended junk recovers prefix",
+			"CONNECTaaaaaaaa example.com:443 HTTP/1.1",
+			testReqLine{"CONNECT", "/", "HTTP/1.1"},
 			false,
 		}, {
 			"invalid version",
 			"GET / HTTP/1.1X",
+			testReqLine{"GET", "/", "HTTP/1.1"},
+			false,
+		}, {
+			"lowercase version normalized to uppercase",
+			"GET / http/1.1",
 			testReqLine{"GET", "/", "HTTP/1.1"},
 			false,
 		}, {

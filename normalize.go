@@ -73,6 +73,9 @@ func TestStrategyNormalization(strategy string) ([]NormalizationTestResults, boo
 		}, {
 			Name:    "PUT with body",
 			Request: "PUT /some/path HTTP/1.1\r\nHost: example.com\r\n\r\nsome body",
+		}, {
+			Name:    "CONNECT",
+			Request: "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
 		},
 	}
 	for t := 0; t < len(tests); t++ {

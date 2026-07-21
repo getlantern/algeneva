@@ -100,18 +100,10 @@ func ReadRequest(b *bufio.Reader) (*http.Request, error) {
 	}
 
 	if req.ContentLength > 0 && req.Method == "GET" {
-		// Some strategies modify the method, making it invalid; such as inserting valid charaters or
-		// replacing the method entirely.
-		//
-		// There are three ways to handle an invalid method:
-		//    1. Spell check the method and replace it with the correct one. This only works if valid
-		//       characters were inserted.
-		//    2. Use a default: if there is a body then use POST, otherwise use GET.
-		//    3. Return an error. This is not ideal because it will invalidate all Geneva strategies
-		//       that modifies the method, even though these work with others servers (e.g. Apache and
-		//		   Nginx).
-		//
-		// For now, we will use the second strategy since it is easier to implement.
+		// GET here is either a genuine GET or the default applied above when parseRequestLine could
+		// not recover a method (only an outright replace defeats recoverMethod). A body alongside
+		// GET suggests the latter, so fall back to POST — a heuristic that can misfire on a genuine
+		// GET with a body, since the true method is unknowable here.
 		req.Method = "POST"
 	}
 
@@ -179,6 +171,10 @@ func parseHeaders(headers [][]byte) ([][]byte, error) {
 		header, err := cleanHeader(header)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", err, h)
+		}
+		if header == nil {
+			// A nil header was dropped by cleanHeader because its name cleaned to empty.
+			continue
 		}
 
 		// Since there can only be one host header, we need to check if it was already found. We
@@ -249,8 +245,7 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 	// Attempt to find method
 	for ; mIdx < len(components)-2; mIdx++ {
 		c := clean(components[mIdx], isAlpha)
-		m := string(c)
-		if isValidMethod(m) {
+		if m := recoverMethod(string(c)); m != "" {
 			method = m
 			break
 		}
@@ -266,7 +261,9 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 		c := clean(components[vIdx], func(b byte) bool { return isValidToken(b, versionTokens) })
 		v := string(c)
 		if isVersion1x(v) {
-			version = v
+			// isVersion1x accepts the lowercase form, but http.ReadRequest only accepts the
+			// canonical uppercase "HTTP/1.x", so normalize it here.
+			version = strings.ToUpper(v)
 			break
 		}
 	}
@@ -279,7 +276,13 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 	// The path must be between the method and version. findPath will also check if valid
 	// characters were inserted in front of path if in the origin or absolute form or inserted at
 	// the front or end of the path if in the asterisk form.
-	path = findPath(components[mIdx+1 : vIdx])
+	//
+	// mIdx+1 can exceed vIdx when a component cleans to a valid method at a higher index than the
+	// component that cleans to a valid version. In that case there is no room for a path, so we
+	// leave it empty and fall back to the root below.
+	if mIdx+1 <= vIdx {
+		path = findPath(components[mIdx+1 : vIdx])
+	}
 
 	if path == "" {
 		// We still didn't find a valid path so it must have been overridden by the replace action.
@@ -293,9 +296,7 @@ func parseRequestLine(line []byte) (method, path, version string, err error) {
 func findPath(components [][]byte) (path string) {
 	cleanedComps := make([][]byte, 0, len(components))
 	for _, comp := range components {
-		comp = clean(comp, func(b byte) bool {
-			return isValidToken(b, validTokenTable) || b == '/' || b == ':'
-		})
+		comp = clean(comp, func(b byte) bool { return isValidToken(b, pathTokenTable) })
 		if isValidPath(comp) {
 			// comp matches the origin, absolute, or asterisk form so we assume it's the path and
 			// return it.
@@ -325,7 +326,7 @@ func findPath(components [][]byte) (path string) {
 		idx := bytes.Index(comp, []byte("http"))
 		if idx != -1 {
 			j := 4
-			if comp[idx+4] == 's' {
+			if idx+4 < len(comp) && comp[idx+4] == 's' {
 				j++
 			}
 
@@ -349,24 +350,31 @@ func findPath(components [][]byte) (path string) {
 	return ""
 }
 
-// isValidMethod returns true if method is a valid HTTP method.
-func isValidMethod(method string) bool {
-	// RFC 7231, section 4.1
-	//    method    = "GET"          ; section 4.3.1
-	//              | "HEAD"         ; section 4.3.2
-	//              | "POST"         ; section 4.3.3
-	//              | "PUT"          ; section 4.3.4
-	//              | "DELETE"       ; section 4.3.5
-	//              | "CONNECT"      ; section 4.3.6
-	//              | "OPTIONS"      ; section 4.3.7
-	//              | "TRACE"        ; section 4.3.8
+// httpMethods are the HTTP methods recognized by the normalizer.
+//
+// RFC 7231, section 4.1:
+//
+//	method = "GET"     ; 4.3.1  / "HEAD"    ; 4.3.2  / "POST"  ; 4.3.3
+//	       / "PUT"     ; 4.3.4  / "DELETE"  ; 4.3.5  / "CONNECT" ; 4.3.6
+//	       / "OPTIONS" ; 4.3.7  / "TRACE"   ; 4.3.8
+var httpMethods = []string{"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"}
 
-	switch method {
-	case "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE":
-		return true
+// recoverMethod returns the HTTP method that m begins with, or "" if m does not start with one.
+//
+// A Geneva duplicate action can leave the method as the original repeated ("CONNECTCONNECT") or
+// with junk appended ("CONNECT" + "aaa..."), which an exact-match check would miss even though the
+// original is plainly recoverable. Matching the leading method recovers it; this is unambiguous
+// because no method is a prefix of another. Junk prepended to the method is not recoverable this
+// way, but no strategy does that: inserts are whitespace/control (trimmed before this point) and
+// duplicate only appends.
+func recoverMethod(m string) string {
+	for _, valid := range httpMethods {
+		if strings.HasPrefix(m, valid) {
+			return valid
+		}
 	}
 
-	return false
+	return ""
 }
 
 // isValidPath returns true if p is a valid HTTP request path. isValidPath does not check for
@@ -378,8 +386,12 @@ func isValidPath(p []byte) bool {
 	//                   / authority-form     ; Section 5.3.3
 	//                   / asterisk-form      ; Section 5.3.4
 	//
-	// We're not to check for authority-form, as that can get complicated. Maybe in the future we
+	// We're not checking for authority-form, as that can get complicated. Maybe in the future we
 	// can add support for it.
+
+	if len(p) == 0 {
+		return false
+	}
 
 	switch {
 	case p[0] == '/': // origin-form
@@ -472,6 +484,45 @@ var versionTokens = [127]bool{
 	'/': true, '1': true, '.': true, '0': true,
 }
 
+// pathTokenTable is a table of valid tokens for the request-target (path and query).
+//
+// It must not be conflated with validTokenTable (the header-field-name tchar set): a request-target
+// legitimately contains characters that are not tchars ('?', '=', '@', ';', ',', '(', ')') and must
+// not contain some that are ('#', '|', '^', '`'). Cleaning the path with the tchar set silently
+// destroys query strings and matrix parameters, so the request-target has its own table.
+var pathTokenTable = [127]bool{
+	// RFC 3986, section 3.3 (path) and 3.4 (query); RFC 7230, section 5.3.1-5.3.2.
+	//    pchar      = unreserved / pct-encoded / sub-delims / ":" / "@"
+	//    unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"
+	//    sub-delims = "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
+	//    query      = *( pchar / "/" / "?" )
+	// Plus '%' for pct-encoded octets. Control characters and SP (which is what strategies insert
+	// into the path) are absent, so they are still stripped.
+
+	'0': true, '1': true, '2': true, '3': true, '4': true, '5': true, '6': true, '7': true,
+	'8': true, '9': true,
+
+	'A': true, 'B': true, 'C': true, 'D': true, 'E': true, 'F': true, 'G': true, 'H': true,
+	'I': true, 'J': true, 'K': true, 'L': true, 'M': true, 'N': true, 'O': true, 'P': true,
+	'Q': true, 'R': true, 'S': true, 'T': true, 'U': true, 'V': true, 'W': true, 'X': true,
+	'Y': true, 'Z': true,
+
+	'a': true, 'b': true, 'c': true, 'd': true, 'e': true, 'f': true, 'g': true, 'h': true,
+	'i': true, 'j': true, 'k': true, 'l': true, 'm': true, 'n': true, 'o': true, 'p': true,
+	'q': true, 'r': true, 's': true, 't': true, 'u': true, 'v': true, 'w': true, 'x': true,
+	'y': true, 'z': true,
+
+	// unreserved
+	'-': true, '.': true, '_': true, '~': true,
+
+	// sub-delims
+	'!': true, '$': true, '&': true, '\'': true, '(': true, ')': true, '*': true, '+': true,
+	',': true, ';': true, '=': true,
+
+	// pchar extras, path/query delimiters, and pct-encoding
+	':': true, '@': true, '/': true, '?': true, '%': true,
+}
+
 // hostTokenTable is a table of valid tokens for host header.
 var hostTokenTable = [127]bool{
 	// RFC 3986, section 3.2.2
@@ -519,7 +570,10 @@ func validHeaderValueToken(b byte) bool {
 	return !isCtrl(b) || b == '\t'
 }
 
-// cleanHeader returns h with all invalid characters removed.
+// cleanHeader returns h with all invalid characters removed. It returns (nil, nil) when h has no
+// valid field-name characters after cleaning, signaling that the header cannot be represented as a
+// valid HTTP header and should be dropped (e.g. when a strategy replaced the name with characters
+// that are not valid tokens).
 //
 // Note that obs-fold (line folding) is not supported, even though it is still currently in the
 // spec, as it is obsolete.
@@ -546,7 +600,11 @@ func cleanHeader(h []byte) ([]byte, error) {
 	// validTokenTable (RFC 7230, section 3.2). The host header value has a different set of valid
 	// characters (RFC 3986, section 3.2.2) so we'll use hostTokenTable for that.
 	name = clean(name, func(b byte) bool { return isValidToken(b, validTokenTable) })
-	hasSepOSP := value[0] == ' '
+	if len(name) == 0 {
+		return nil, nil
+	}
+
+	hasSepOSP := len(value) > 0 && value[0] == ' '
 	if hasSepOSP {
 		value = value[1:]
 	}

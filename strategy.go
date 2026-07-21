@@ -154,10 +154,15 @@ func (t *trigger) match(req *request) (field, bool) {
 			return field{}, false
 		}
 
-		parts := strings.Split(header, ":")
+		// Cut on the first ':' so a value that itself contains ':' (e.g. host:port) stays intact.
+		headerName, headerValue, ok := strings.Cut(header, ":")
+		if !ok {
+			return field{}, false
+		}
+
 		fld = field{
-			name:     parts[0],
-			value:    parts[1],
+			name:     headerName,
+			value:    headerValue,
 			isHeader: true,
 		}
 	}
@@ -174,7 +179,7 @@ func matchValue(value, matchstr string) bool {
 func parseRule(r string) (rule, error) {
 	parts := strings.Split(r, "-")
 
-	if len(parts) != 3 && parts[len(parts)-1] != "|" {
+	if len(parts) != 3 || parts[len(parts)-1] != "|" {
 		return rule{}, fmt.Errorf("%w: %s, should be formatted as '<trigger>-<actions>-|'", ErrInvalidRule, r)
 	}
 

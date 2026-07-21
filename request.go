@@ -60,18 +60,22 @@ func (r *request) bytes() []byte {
 	return buf
 }
 
-// getHeader returns the full header, including the name, if it exists. getHeader is case insensitive.
+// getHeader returns the full header line, including the name, whose field name matches name
+// case-insensitively. It returns "" if no such header exists.
 func (r *request) getHeader(name string) string {
-	headers := strings.ToLower(r.headers)
-	idx := strings.Index(headers, name+":")
-	if idx == -1 {
-		return ""
+	for rest := r.headers; rest != ""; {
+		line, next, _ := strings.Cut(rest, "\r\n")
+		rest = next
+
+		headerName, _, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+
+		if strings.EqualFold(strings.TrimSpace(headerName), name) {
+			return line
+		}
 	}
 
-	nl := strings.Index(r.headers[idx:], "\r\n")
-	if nl == -1 {
-		nl = len(r.headers[idx:])
-	}
-
-	return r.headers[idx : idx+nl]
+	return ""
 }
