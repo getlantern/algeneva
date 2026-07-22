@@ -53,7 +53,27 @@ func Test_parseRule(t *testing.T) {
 		want    rule
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "valid rule",
+			rule: "[http:path:*]-changecase{upper}-|",
+			want: rule{
+				trigger: trigger{proto: "HTTP", targetField: "path", matchStr: "*"},
+				tree:    testChangecaseAction(),
+			},
+			wantErr: false,
+		}, {
+			name:    "missing trailing pipe",
+			rule:    "[http:path:*]-changecase{upper}-",
+			wantErr: true,
+		}, {
+			name:    "too few parts",
+			rule:    "[http:path:*]-|",
+			wantErr: true,
+		}, {
+			name:    "too many parts",
+			rule:    "[http:path:*]-changecase{upper}-extra-|",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -131,6 +131,10 @@ func TestCleanHeader(t *testing.T) {
 			"name cleans to empty is dropped",
 			"////: value",
 			"",
+		}, {
+			"IPv6 host literal preserved",
+			"Host: [::1]:443",
+			"Host: [::1]:443",
 		},
 	}
 	for _, tt := range tests {
@@ -160,6 +164,11 @@ func TestParseRequestLine(t *testing.T) {
 			"absolute URI",
 			" GET http://example.com HTTP/1.1",
 			testReqLine{"GET", "http://example.com", "HTTP/1.1"},
+			false,
+		}, {
+			"absolute URI with IPv6 literal",
+			"GET http://[::1]:8080/p HTTP/1.1",
+			testReqLine{"GET", "http://[::1]:8080/p", "HTTP/1.1"},
 			false,
 		}, {
 			"leading whitespace",

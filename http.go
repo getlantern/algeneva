@@ -170,7 +170,7 @@ func parseHeaders(headers [][]byte) ([][]byte, error) {
 	for _, header := range headers {
 		header, err := cleanHeader(header)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s", err, h)
+			return nil, fmt.Errorf("parsing headers: %w", err)
 		}
 		if header == nil {
 			// A nil header was dropped by cleanHeader because its name cleaned to empty.
@@ -521,6 +521,9 @@ var pathTokenTable = [127]bool{
 
 	// pchar extras, path/query delimiters, and pct-encoding
 	':': true, '@': true, '/': true, '?': true, '%': true,
+
+	// IPv6 literal brackets, so an absolute-form target's authority (e.g. http://[::1]/) survives
+	'[': true, ']': true,
 }
 
 // hostTokenTable is a table of valid tokens for host header.
@@ -554,6 +557,9 @@ var hostTokenTable = [127]bool{
 
 	// unreserved
 	'-': true, '.': true, '_': true, '~': true,
+
+	// IPv6 literal brackets (e.g. Host: [::1]:443)
+	'[': true, ']': true,
 }
 
 // validHeaderValueToken returns true if b is a valid header value token.
