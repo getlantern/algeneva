@@ -53,7 +53,27 @@ func Test_parseRule(t *testing.T) {
 		want    rule
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "valid rule",
+			rule: "[http:path:*]-changecase{upper}-|",
+			want: rule{
+				trigger: trigger{proto: "HTTP", targetField: "path", matchStr: "*"},
+				tree:    testChangecaseAction(),
+			},
+			wantErr: false,
+		}, {
+			name:    "missing trailing pipe",
+			rule:    "[http:path:*]-changecase{upper}-",
+			wantErr: true,
+		}, {
+			name:    "too few parts",
+			rule:    "[http:path:*]-|",
+			wantErr: true,
+		}, {
+			name:    "too many parts",
+			rule:    "[http:path:*]-changecase{upper}-extra-|",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -246,6 +266,61 @@ func Test_applyModifications(t *testing.T) {
 			assert.Equal(t, tt.want, string(req.bytes()))
 		})
 	}
+}
+
+func Test_triggerMatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		trigger   trigger
+		req       request
+		wantField field
+		wantMatch bool
+	}{
+		{
+			name:      "host header value with port kept intact",
+			trigger:   trigger{proto: "HTTP", targetField: "host", matchStr: "*"},
+			req:       request{method: "CONNECT", path: "example.com:443", version: "HTTP/1.1", headers: "Host: example.com:443"},
+			wantField: field{name: "Host", value: " example.com:443", isHeader: true},
+			wantMatch: true,
+		}, {
+			name:      "method",
+			trigger:   trigger{proto: "HTTP", targetField: "method", matchStr: "*"},
+			req:       request{method: "CONNECT", path: "example.com:443", version: "HTTP/1.1", headers: "Host: example.com:443"},
+			wantField: field{name: "method", value: "CONNECT"},
+			wantMatch: true,
+		}, {
+			name:      "missing header does not match",
+			trigger:   trigger{proto: "HTTP", targetField: "x-absent", matchStr: "*"},
+			req:       request{method: "GET", path: "/", version: "HTTP/1.1", headers: "Host: example.com"},
+			wantField: field{},
+			wantMatch: false,
+		}, {
+			name:      "empty proto never matches",
+			trigger:   trigger{proto: "", targetField: "method", matchStr: "*"},
+			req:       request{method: "GET", path: "/", version: "HTTP/1.1", headers: "Host: example.com"},
+			wantField: field{},
+			wantMatch: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fld, match := tt.trigger.match(&tt.req)
+			assert.Equal(t, tt.wantMatch, match)
+			assert.Equal(t, tt.wantField, fld)
+		})
+	}
+}
+
+func TestApplyPreservesHostPort(t *testing.T) {
+	// Inserting at the end of the Host value must land after the port, not before it. This guards
+	// the strings.Cut fix in trigger.match: splitting the header on every ':' truncated the value
+	// to " example.com" and left ":443" orphaned when applyModifications rewrote the line.
+	strat, err := NewHTTPStrategy("[HTTP:host:*]-insert{X:end:value:1}-|")
+	require.NoError(t, err)
+
+	got, err := strat.Apply([]byte("CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443X\r\n\r\n", string(got))
 }
 
 func testReq() request {

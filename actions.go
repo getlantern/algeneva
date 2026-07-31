@@ -356,8 +356,7 @@ func (a *terminateAction) string() string {
 	return ""
 }
 
-// apply returns field.Name and field.Value concatenated together separated by ":" if field is a header.
-// Otherwise, apply returns field.Value. apply does not call another action.
+// apply returns fld unchanged as the sole result, terminating the action chain.
 func (a *terminateAction) apply(fld field) []field {
 	return []field{fld}
 }
